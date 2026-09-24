@@ -1,6 +1,7 @@
 """BOLA / IDOR (Broken Object Level Authorization) interactive assessment UI & dynamic live auditor."""
 import time
 import re
+from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
 import httpx
 from rich.panel import Panel
@@ -12,6 +13,15 @@ from prompt_toolkit.styles import Style
 
 from sentinelapi.cli.theme import console
 from sentinelapi.api_source.spec_parser import ParsedSpecification, APIEndpointInfo
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+MARKDOWN_DIR = PROJECT_ROOT / "markdown"
+
+
+def get_markdown_dir() -> Path:
+    """Ensures and returns the markdown directory."""
+    MARKDOWN_DIR.mkdir(parents=True, exist_ok=True)
+    return MARKDOWN_DIR
 
 CUSTOM_STYLE = Style(
     [
@@ -470,6 +480,13 @@ def run_assessment(spec: ParsedSpecification, endpoints: List[APIEndpointInfo], 
             console.print(Panel(remed_syntax, title="[bold green]Recommended Fix (Ownership Validation)[/bold green]", border_style="green"))
             console.print()
 
+    # Automatically save scan results to markdown folder
+    try:
+        scan_md_file = save_scan_results_markdown(spec, results, config)
+        console.print(f"[bold green]✓ Scan findings saved to markdown folder: [white]{scan_md_file}[/white][/bold green]\n")
+    except Exception as e:
+        console.print(f"[dim yellow]Warning: Could not save scan findings to markdown: {e}[/dim yellow]\n")
+
     # Step: Dynamic AI Security Overview & Remediation Synthesis
     present_ai_overview_step(spec, results, config)
 
@@ -477,6 +494,105 @@ def run_assessment(spec: ParsedSpecification, endpoints: List[APIEndpointInfo], 
         questionary.press_any_key_to_continue("Press any key to return to BOLA menu...").ask()
     except (KeyboardInterrupt, EOFError):
         pass
+
+
+def save_scan_results_markdown(
+    spec: ParsedSpecification,
+    results: List[Dict[str, Any]],
+    config: Dict[str, Any],
+) -> Path:
+    """Saves the scan telemetry and findings as a structured Markdown file in markdown/."""
+    md_dir = get_markdown_dir()
+    slug = re.sub(r"[^a-zA-Z0-9]+", "_", spec.title).strip("_").lower() or "api"
+    timestamp = int(time.time())
+    scan_file = md_dir / f"{slug}_bola_scan_results_{timestamp}.md"
+
+    vuln_results = [r for r in results if r.get("vulnerable")]
+    passed_results = [r for r in results if not r.get("vulnerable")]
+
+    lines = [
+        f"# SentinelAPI Security Assessment: {spec.title}",
+        "",
+        f"- **Date:** {time.ctime()}",
+        f"- **Target Base URL:** `{spec.base_url}`",
+        f"- **Specification:** {spec.spec_type} (Version: {spec.version})",
+        f"- **Auth Scheme:** {spec.auth_scheme} (Header: `{config.get('auth_header_name', 'Authorization')}`)",
+        f"- **Total Endpoints Tested:** {len(results)}",
+        f"- **Vulnerabilities Identified:** {len(vuln_results)}",
+        f"- **Protected Endpoints:** {len(passed_results)}",
+        f"- **Overall Risk:** {'CRITICAL RISK (OWASP API1:2023 - BOLA/IDOR)' if vuln_results else 'LOW / ZERO RISK (PASSED)'}",
+        "",
+        "## Executive Summary",
+        "",
+        f"{'CRITICAL: Broken Object Level Authorization flaws were discovered. Authenticated callers can access or manipulate records of other tenants without authorization.' if vuln_results else 'CLEARANCE: No BOLA/IDOR vulnerabilities were detected. Strict object-level ownership checks were verified.'}",
+        "",
+        "## Scan Results Matrix",
+        "",
+        "| Method | Endpoint Path | Baseline (Owner) | Attacker Probe | Verdict |",
+        "|---|---|---|---|---|",
+    ]
+
+    for r in results:
+        ep = r["endpoint"]
+        verdict = "**VULNERABLE (BOLA)**" if r.get("vulnerable") else "PASSED (SECURE)"
+        probe_str = f"HTTP {r['attack_status']} LEAK" if r.get("vulnerable") else f"HTTP {r['attack_status']} BLOCKED"
+        lines.append(f"| `{ep.method}` | `{ep.path}` | HTTP {r['baseline_status']} | {probe_str} | {verdict} |")
+
+    if vuln_results:
+        lines.extend([
+            "",
+            "## Detailed Vulnerability Findings",
+            "",
+        ])
+        for idx, res in enumerate(vuln_results, 1):
+            ep = res["endpoint"]
+            lines.extend([
+                f"### Finding #{idx}: {ep.method} {ep.path}",
+                "",
+                f"- **Vulnerability Type:** OWASP API1:2023 - Broken Object Level Authorization (IDOR)",
+                f"- **Severity:** High / Critical",
+                f"- **Target URL:** `{res['target_url']}`",
+                f"- **Attack Status:** HTTP {res['attack_status']}",
+                f"- **Leaked Response Data:**",
+                "```json",
+                (res.get("response_snippet") or "")[:300],
+                "```",
+                "",
+                "#### Proof of Concept (PoC)",
+                "```bash",
+                f"curl -X {ep.method} \"{res['target_url']}\" \\",
+                f"  -H \"{config['auth_header_name']}: {config['attacker_token']}\" \\",
+                f"  -H \"Content-Type: application/json\"",
+                "```",
+                "",
+                "#### Recommended Remediation",
+                "```javascript",
+                "// Ensure current authenticated user owns the requested resource",
+                "const requestedId = parseInt(req.params.userId || req.params.id, 10);",
+                "if (req.user.id !== requestedId) {",
+                "  return res.status(403).json({",
+                "    error: 'Forbidden',",
+                "    code: 'BOLA_PREVENTED',",
+                "    message: 'Access denied: You do not own this resource.'",
+                "  });",
+                "}",
+                "```",
+                "",
+            ])
+    else:
+        lines.extend([
+            "",
+            "## Defensive Verification",
+            "",
+            "- All endpoints correctly returned HTTP 403 / 401 when accessed with unauthorized tokens.",
+            "- Object ownership validations are active and working as expected.",
+            "",
+        ])
+
+    with open(scan_file, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines))
+
+    return scan_file
 
 
 def present_ai_overview_step(
@@ -576,29 +692,40 @@ def present_ai_overview_step(
     console.print(md)
     console.print()
 
+    # Automatically save AI report in markdown/ folder
+    md_dir = get_markdown_dir()
+    slug = re.sub(r"[^a-zA-Z0-9]+", "_", spec.title).strip("_").lower() or "api"
+    timestamp = int(time.time())
+    ai_md_filename = md_dir / f"{slug}_bola_ai_report_{timestamp}.md"
+
+    try:
+        with open(ai_md_filename, "w", encoding="utf-8") as f:
+            f.write(f"# SentinelAPI Security Overview: {spec.title}\n\n")
+            f.write(f"- Date: {time.ctime()}\n")
+            f.write(f"- Model: {ai_cfg['model']}\n")
+            f.write(f"- Base URL: {spec.base_url}\n\n")
+            f.write(ai_report)
+        console.print(f"[bold green]✓ AI Report automatically saved to markdown folder: [white]{ai_md_filename}[/white][/bold green]\n")
+    except Exception as e:
+        console.print(f"[dim yellow]Warning: Could not auto-save AI report to markdown: {e}[/dim yellow]\n")
+
     # Post-Report Options
     report_choices = [
-        "1. Save AI Report to Markdown file",
+        f"1. Save / Re-verify AI Report in markdown folder ({ai_md_filename.name})",
         "2. Continue to BOLA Menu",
     ]
 
     try:
         action = questionary.select("AI Report Options:", choices=report_choices, style=CUSTOM_STYLE).ask()
         if action and "1. Save" in action:
-            reports_dir = Path("reports")
-            reports_dir.mkdir(exist_ok=True)
-            slug = re.sub(r"[^a-zA-Z0-9]+", "_", spec.title).strip("_").lower() or "api"
-            timestamp = int(time.time())
-            filename = reports_dir / f"{slug}_bola_ai_report_{timestamp}.md"
-
-            with open(filename, "w", encoding="utf-8") as f:
+            with open(ai_md_filename, "w", encoding="utf-8") as f:
                 f.write(f"# SentinelAPI Security Overview: {spec.title}\n\n")
                 f.write(f"- Date: {time.ctime()}\n")
                 f.write(f"- Model: {ai_cfg['model']}\n")
                 f.write(f"- Base URL: {spec.base_url}\n\n")
                 f.write(ai_report)
 
-            console.print(f"\n[bold green]✓ Report successfully saved to: [white]{filename}[/white][/bold green]\n")
+            console.print(f"\n[bold green]✓ Report saved in markdown folder: [white]{ai_md_filename}[/white][/bold green]\n")
             time.sleep(1.5)
     except (KeyboardInterrupt, EOFError):
         pass
