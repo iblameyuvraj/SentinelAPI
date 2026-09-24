@@ -66,6 +66,7 @@ docker run --rm \
     --no-ai \
     --no-email || SCAN_EXIT=$?
 
+
 echo ""
 echo "📊 Local Test Conclusion Code: $SCAN_EXIT"
 if [ "$SCAN_EXIT" -eq 0 ]; then

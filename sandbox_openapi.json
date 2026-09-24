@@ -1,15 +1,23 @@
 {
   "openapi": "3.0.3",
   "info": {
-    "title": "Fluffwalks Web API — Complete Security Assessment Suite",
+    "title": "Fluffwalks Web API \u2014 Complete Security Assessment Suite",
     "description": "Unified OpenAPI specification for Fluffwalks (fluffwalks.in). Consolidates all security audit endpoints spanning BOLA/IDOR, Excessive Data Exposure, Authentication Misconfiguration, Rate Limiting, BFLA/Privilege Escalation, Security Misconfiguration (Headers & Cookies), and Shadow/Zombie API Discovery across Customer, Boarder, Payment, and Admin domains.",
     "version": "1.0.0",
     "contact": {
       "name": "Yuvraj Soni",
       "email": "yuvrajjsoni17@gmail.com"
-    }
+    },
+    "x-generated-at": "2026-09-24T23:56:13.967687+00:00",
+    "x-git-branch": "deployment",
+    "x-git-commit": "4fd1a1f",
+    "x-generator": "SentinelAPI CI/CD OpenAPI Generator"
   },
   "servers": [
+    {
+      "url": "https://fluffwalks-website.vercel.app",
+      "description": "Live Preview Deployment (Vercel / Dynamic CI)"
+    },
     {
       "url": "https://www.fluffwalks.in",
       "description": "Fluffwalks Live Production Server"
@@ -49,7 +57,7 @@
         "properties": {
           "error": {
             "type": "string",
-            "example": "Forbidden — you are not assigned to this stay."
+            "example": "Forbidden \u2014 you are not assigned to this stay."
           }
         }
       },
@@ -343,7 +351,7 @@
             "description": "Unauthorized"
           },
           "403": {
-            "description": "Forbidden — user is not the assigned boarder"
+            "description": "Forbidden \u2014 user is not the assigned boarder"
           }
         }
       }
@@ -376,7 +384,7 @@
             "description": "Unauthorized"
           },
           "403": {
-            "description": "Forbidden — payment record does not belong to user"
+            "description": "Forbidden \u2014 payment record does not belong to user"
           }
         }
       }
@@ -410,7 +418,7 @@
             "description": "Unauthorized"
           },
           "403": {
-            "description": "Forbidden — admin privileges required"
+            "description": "Forbidden \u2014 admin privileges required"
           }
         }
       }
