@@ -256,22 +256,19 @@ class MasterScanResult:
 
     @property
     def exit_code(self) -> int:
-        """Standard CI/CD exit code mapping.
+        """Standard CI/CD exit code mapping (0, 1, 2).
 
-        0 = PASS (Clean, all probes verified)
-        1 = FAIL (Vulnerabilities found)
-        2 = ERROR (Target offline, zero probes ran, or fatal exception)
-        3 = INCOMPLETE (Partial probe failures or missing coverage)
+        0 = PASS (Clean, all probes verified, zero vulnerabilities)
+        1 = FAIL (Security vulnerabilities confirmed)
+        2 = ERROR (Target offline, incomplete/failed probes, or fatal error)
         """
         st = self.status
         if st == ScanStatus.PASS.value:
             return 0
         elif st == ScanStatus.FAIL.value:
             return 1
-        elif st == ScanStatus.ERROR.value:
+        elif st == ScanStatus.ERROR.value or st == ScanStatus.INCOMPLETE.value:
             return 2
-        elif st == ScanStatus.INCOMPLETE.value:
-            return 3
         return 2
 
     def to_dict(self) -> Dict[str, Any]:

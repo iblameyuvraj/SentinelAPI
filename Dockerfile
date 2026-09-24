@@ -32,6 +32,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY sentinelapi/ ./sentinelapi/
 COPY sentinel ./sentinel
 COPY sandbox_openapi.json ./
+COPY scripts/ ./scripts/
 COPY .env.example ./
 
 # Install sentinelapi in editable mode so 'sentinel' command is available on PATH
