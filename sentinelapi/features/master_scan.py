@@ -17,6 +17,8 @@ Architecture:
   - Streams full AI Security Intelligence Report with concrete remediation
   - Exports both Markdown and structured JSON reports
 """
+import os
+import shutil
 import json
 import time
 import re
@@ -286,8 +288,8 @@ def run_master_scan(
         ai_report_text = generate_and_render_ai_master_report(spec, config, master_result)
         master_result.ai_report_markdown = ai_report_text
 
-    # ── Step 5: Save Structured JSON & Markdown Artifacts ──
-    _save_scan_artifacts(master_result)
+    # ── Step 5: Save Structured JSON, Markdown & Executive PDFs (+ Email Alert) ──
+    _save_scan_artifacts(master_result, config=config)
 
     if not config_override:
         console.print()
@@ -379,6 +381,24 @@ def configure_master_scan(spec: ParsedSpecification) -> Optional[Dict[str, Any]]
             style=CUSTOM_STYLE,
         ).ask()
 
+        # ── Q6: Automated Email Dispatch ──
+        default_email = os.getenv("ALERT_RECIPIENT_EMAIL") or "yuvrajjsoni17@gmail.com"
+        send_email = questionary.confirm(
+            "Q6. Send automated CI/CD email alert with PDF attachments to email?",
+            default=True,
+            style=CUSTOM_STYLE,
+        ).ask()
+
+        recipient_email = default_email
+        if send_email:
+            recipient_email = questionary.text(
+                "    Recipient Email address:",
+                default=default_email,
+                style=CUSTOM_STYLE,
+            ).ask()
+            if recipient_email:
+                recipient_email = recipient_email.strip()
+
         # Build parameter samples from endpoints
         params = {}
         for ep in spec.endpoints:
@@ -401,6 +421,7 @@ def configure_master_scan(spec: ParsedSpecification) -> Optional[Dict[str, Any]]
         console.print(f"  [dim]Token:[/dim]   {token_input[:45]}..." if token_input and len(token_input) > 45 else f"  [dim]Token:[/dim]   {token_input or '(none)'}")
         console.print(f"  [dim]Burst:[/dim]   {burst_count} req/route")
         console.print(f"  [dim]AI:[/dim]      {'Yes' if generate_ai else 'No'}")
+        console.print(f"  [dim]Email:[/dim]   {recipient_email if send_email else 'Disabled'}")
         console.print("[bold green]━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[/bold green]")
         console.print()
 
@@ -422,6 +443,8 @@ def configure_master_scan(spec: ParsedSpecification) -> Optional[Dict[str, Any]]
             "user_token": token_input or "",
             "base_token": base_token,
             "generate_ai": generate_ai if generate_ai is not None else True,
+            "send_email": send_email if send_email is not None else True,
+            "recipient_email": recipient_email or default_email,
         }
 
     except (KeyboardInterrupt, EOFError):
@@ -1059,8 +1082,8 @@ def generate_and_render_ai_master_report(
         return None
 
 
-def _save_scan_artifacts(master_result: MasterScanResult):
-    """Saves both human-readable Markdown and machine-readable JSON artifacts."""
+def _save_scan_artifacts(master_result: MasterScanResult, config: Optional[Dict[str, Any]] = None):
+    """Saves structured JSON, Markdown, and executive PDF reports + dispatches email."""
     MARKDOWN_DIR.mkdir(parents=True, exist_ok=True)
     timestamp = time.strftime("%Y%m%d_%H%M%S")
 
@@ -1096,3 +1119,40 @@ def _save_scan_artifacts(master_result: MasterScanResult):
         console.print(f"[bold green]✓[/bold green] Complete Markdown report saved → [bold cyan]{md_path}[/bold cyan]")
     except Exception as e:
         console.print(f"[dim yellow]Warning: Could not save Markdown report: {e}[/dim yellow]")
+
+    # 3. Generate Executive PDF Reports
+    vuln_pdf = MARKDOWN_DIR / f"vulnerabilities_{timestamp}.pdf"
+    logs_pdf = MARKDOWN_DIR / f"all_logs_{timestamp}.pdf"
+    canonical_vuln = MARKDOWN_DIR / "vulnerabilities.pdf"
+    canonical_logs = MARKDOWN_DIR / "all_logs.pdf"
+
+    try:
+        from sentinelapi.reporting.pdf_generator import generate_vulnerabilities_pdf, generate_logs_pdf
+        generate_vulnerabilities_pdf(master_result, vuln_pdf)
+        generate_logs_pdf(master_result, logs_pdf)
+        shutil.copyfile(vuln_pdf, canonical_vuln)
+        shutil.copyfile(logs_pdf, canonical_logs)
+
+        console.print(f"[bold green]✓[/bold green] Executive Vulnerabilities PDF saved → [bold cyan]{vuln_pdf}[/bold cyan]")
+        console.print(f"[bold green]✓[/bold green] Complete Probe Telemetry PDF saved → [bold cyan]{logs_pdf}[/bold cyan]")
+    except Exception as e:
+        console.print(f"[dim yellow]Warning: Could not generate PDF reports: {e}[/dim yellow]")
+
+    # 4. Dispatch Automated Email Report via Brevo
+    cfg = config or {}
+    send_email = cfg.get("send_email")
+    if send_email is None:
+        send_email = bool(os.getenv("BREVO_API_KEY") or os.getenv("BRAVO_API"))
+
+    if send_email:
+        try:
+            from sentinelapi.reporting.email_service import send_scan_report_email
+            target_recipient = cfg.get("recipient_email") or os.getenv("ALERT_RECIPIENT_EMAIL") or "yuvrajjsoni17@gmail.com"
+            send_scan_report_email(
+                master_result=master_result,
+                recipient_email=target_recipient,
+                vuln_pdf_path=canonical_vuln if canonical_vuln.exists() else vuln_pdf,
+                logs_pdf_path=canonical_logs if canonical_logs.exists() else logs_pdf,
+            )
+        except Exception as e:
+            console.print(f"[dim yellow]Warning: Email dispatch encountered an error: {e}[/dim yellow]")

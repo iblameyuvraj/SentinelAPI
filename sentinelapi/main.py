@@ -51,6 +51,18 @@ def main():
         action="store_true",
         help="CI mode: Fail-closed non-zero exit code on FAIL, ERROR, or INCOMPLETE",
     )
+    parser.add_argument(
+        "--email",
+        type=str,
+        nargs="?",
+        const="DEFAULT",
+        help="Send automated email report via Brevo (optionally specify recipient email)",
+    )
+    parser.add_argument(
+        "--no-email",
+        action="store_true",
+        help="Disable automated email report dispatch",
+    )
 
     args = parser.parse_args()
 
@@ -64,6 +76,9 @@ def main():
             sys.exit(2)
 
         base_url = (args.base_url or spec.base_url or "http://localhost:3000").rstrip("/")
+        send_email = not args.no_email
+        recipient = None if args.email == "DEFAULT" else args.email
+
         config = {
             "base_url": base_url,
             "bearer_token": args.token,
@@ -73,6 +88,8 @@ def main():
             "user_token": args.token,
             "base_token": args.token,
             "generate_ai": not args.no_ai,
+            "send_email": send_email,
+            "recipient_email": recipient or "yuvrajjsoni17@gmail.com",
         }
 
         console.print(f"[bold cyan]Launching automated SentinelAPI master scan against {base_url}...[/bold cyan]\n")

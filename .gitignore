@@ -37,3 +37,6 @@ htmlcov/
 reports/*.json
 reports/*.md
 !reports/.gitkeep
+markdown/*.json
+markdown/*.md
+markdown/*.pdf
