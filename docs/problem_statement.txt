@@ -1,0 +1,97 @@
+AMIHACKS
+
+This packet presents three full-length, in-depth problem statements proposed for the AmiHacks hackathon. Each statement is deliberately kept comprehensive at this stage so the faculty panel can evaluate the complete scope, difficulty, and intent behind every track. Once approved, these will be condensed into participant-facing briefs for the event itself.
+TRACK A
+TRACK B
+TRACK C
+NGO / Social Impact
+Industry / Open Innovation
+Industry / Deep-Tech
+Surplus-to-Shelter
+Real-Time Food Rescue Routing
+CityPulse
+The Live Civic Health Dashboard
+SentinelAPI
+Zero-Trust API Vulnerability Scanner
+Event	AmiHacks
+Document status
+Draft -- Full-length version for approval (to be trimmed post-approval)
+Number of tracks
+3 (1 NGO/social-impact track, 2 industry/open-innovation tracks)
+Suggested duration
+24 hours
+Team skill level	Mixed -- beginner-friendly entry point with an advanced ceiling in every track
+Prepared by the AmiHacks organizing team for internal faculty circulation. Not for public distribution in this form.
+Contents
+
+	•	Track A -- Surplus-to-Shelter: Real-Time Food Rescue Routing (NGO / Social Impact)
+	•	Track B -- CityPulse: The Live Civic Health Dashboard (Industry / Open Innovation)
+	•	Track C -- SentinelAPI: Zero-Trust API Vulnerability Scanner (Industry / Deep-Tech)
+	•	Appendix -- Comparative Summary & Approval Checklist
+TRACK A · NGO / SOCIAL IMPACT
+Problem Statement-3: SentinelAPI: Zero-Trust API Vulnerability Scanner
+
+"Find the API vulnerability before the breach headline does."
+Domain
+API security / zero-trust tooling
+Difficulty
+Advanced -- strong intermediate teams can hit a working baseline
+Duration
+24 hours | Tech stack: open / any
+Focus
+Industry-focused; selected via current hackathon-trend research (cybersecurity / developer tooling is a recurring high-technical-depth 2026 category)
+1. Problem Statement
+Modern applications are built on dozens to hundreds of internal and third-party APIs, and API-related breaches -- broken object-level authorization, excessive data exposure, misconfigured auth -- have become one of the most common attack vectors in production systems. Most engineering teams, especially at startups and mid-size companies, have no automated, continuous way to scan their API surface for these vulnerabilities; security reviews happen manually, infrequently, and often after the API is already in production.
+Who experiences it
+	•	Backend/platform engineering teams -- own the APIs.
+	•	Security/AppSec teams -- responsible for catching issues, usually understaffed relative to the API surfacearea.
+	•	End users -- whose data is exposed when these issues are not caught.
+Why it matters
+API vulnerabilities are a leading real-world breach vector, and the gap between API shipped and API security-reviewed is often measured in months, not days -- leaving a long exposure window.
+Current limitations
+Existing tools are either expensive enterprise SaaS products (inaccessible to smaller teams), generic web vulnerability scanners not tuned for API-specific issues such as broken object-level authorization, or fully manual penetration testing that does not scale with how fast APIs change.
+Why it is hard
+Detecting these issues requires understanding authorization logic and data flow, not just scanning for known signatures -- a request can be syntactically valid and still leak another user's data, which requires reasoning about business logic, not just HTTP traffic patterns.
+2. Target Users / Stakeholders
+	•	Primary: Backend/platform engineers and AppSec/security engineers at companies exposing APIs.
+	•	Secondary: Engineering managers (risk visibility), compliance teams (audit trails), and end users (indirectbeneficiaries of reduced breach risk).
+3. Current Situation & Pain Points
+	•	Security reviews of APIs are manual, infrequent, and don't scale with deployment velocity.
+	•	Generic scanners catch surface-level issues (missing headers, outdated TLS) but miss logic-level flaws likebroken object-level authorization (a user accessing another user's /orders/{id}).
+	•	No continuous, automated signal -- vulnerabilities are often discovered by external researchers or, worse,by attackers.
+	•	Small/mid-size teams cannot afford enterprise API security platforms.
+	•	Findings, when they do happen, often lack clear reproduction steps or severity context, making triage slow.
+4. Objective
+Build a tool that automatically scans a given API -- using its OpenAPI/Swagger spec or live traffic -- for common, high-impact vulnerability classes, especially authorization and data-exposure issues, and produces clear, actionable, severity-ranked findings. The specific scanning technique, the vulnerability classes covered, and the interface are all open.
+5. Expected Solution Capabilities
+	•	Ingest an API definition (OpenAPI/Swagger spec) or observe live traffic.
+	•	Automatically test for authorization flaws (e.g., IDOR / broken object-level authorization) by manipulatingidentifiers across authenticated sessions.
+	•	Detect excessive data exposure (responses returning more fields than the client needs or should see).
+	•	Detect missing or weak rate limiting / auth misconfigurations.
+	•	Produce severity-ranked, explainable findings -- not just a raw log dump.
+	•	Generate reproducible proof-of-concept requests for each finding.
+	•	Provide a dashboard/report view suitable for both engineers and non-technical stakeholders.
+	•	Optional: continuous / CI-integrated scanning rather than one-off scans.
+6. Innovation Opportunities
+	•	AI/ML: use an LLM to reason about likely authorization-logic flaws from an API spec, generating smartertest cases than brute-force fuzzing.
+	•	Agentic AI: an autonomous pentest agent that chains multiple API calls to discover multi-stepvulnerabilities.
+	•	NLP: parse API documentation/spec descriptions to infer intended access-control boundaries.
+	•	Automation: CI/CD-integrated scanning that blocks risky deployments.
+	•	Data analytics: trend dashboards showing vulnerability classes over time across an org's API surface.
+	•	Graph analysis: map API-to-API data dependencies to find cascading exposure risks.
+Use only what is genuinely justified -- a scanner that reliably catches a few real vulnerability classes beats one that claims broad coverage without precision.
+7. Constraints & Considerations
+	•	Ethics/scope (critical safety constraint): must only test against explicitly provided/sandboxed APIs -- neverreal production systems without authorization.
+	•	Security: the scanning tool itself must not become an attack vector (e.g., insecure storage of discoveredcredentials/tokens).
+	•	False positives: must minimize noise -- a scanner that cries wolf gets ignored.
+	•	Explainability: findings must include clear reproduction steps, not just "vulnerability detected."
+	•	Reliability: should not crash or degrade the target API under test, especially for live-traffic-basedapproaches.
+	•	Scalability: should conceptually handle APIs with hundreds of endpoints, not just toy examples.
+	•	Accessibility: non-security-specialist engineers should be able to understand and act on findings.
+8. Hackathon Scope (24 Hours)
+A realistic 24-hour MVP consists of:
+	•	A provided, sandboxed test API with deliberately seeded vulnerabilities (e.g., an intentionally vulnerabledemo app).
+	•	A scanner that takes the API's OpenAPI spec and tests for at least one or two vulnerability classes (e.g.,broken object-level authorization).
+	•	A report/dashboard showing findings with severity and reproduction steps.
+	•	Advanced teams can add LLM-assisted test-case generation, multi-step agentic exploitation chains, or CI/CD integration.
+.

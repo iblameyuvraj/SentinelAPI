@@ -1,0 +1,746 @@
+We are building a hackathon project called "SentinelAPI".
+
+## HACKATHON PROBLEM
+
+Selected track:
+
+Track C — SentinelAPI: Zero-Trust API Vulnerability Scanner
+
+Goal:
+Build a security scanner that can ingest an OpenAPI/Swagger specification or observe/test a sandboxed API, automatically detect API vulnerabilities, explain the findings, and generate reproducible PoCs.
+
+Target users:
+- Backend engineers
+- Platform engineers
+- AppSec/security teams
+
+Important problem areas from the problem statement:
+- BOLA / IDOR
+- Excessive Data Exposure
+- Authentication misconfiguration
+- Weak/missing rate limiting
+- Authorization/logic flaws
+- Need for explainable findings
+- Need for reproducible PoC requests
+
+24-hour MVP should prioritize precision over huge vulnerability coverage.
+
+---
+
+# OUR PRODUCT IDEA
+
+We are NOT trying to build a full Burp Suite replacement.
+
+We want to build a polished TERMINAL-FIRST interactive security console.
+
+The application should feel like a real professional CLI security tool.
+
+No web dashboard initially.
+
+If time remains later, a web dashboard can be added.
+
+---
+
+# USER EXPERIENCE
+
+When SentinelAPI starts:
+
+1. Show a loading/startup animation.
+
+Example:
+
+Initializing SentinelAPI...
+████████████████████████ 100%
+
+✓ Scanner engine loaded
+✓ Vulnerability modules loaded
+✓ Configuration loaded
+
+Then show the main menu:
+
+[1] Documentation
+[2] Add API
+[3] Use an API
+
+User should be able to:
+- use arrow keys
+- select with numbers
+- press Enter
+- use Space for multi-selection where appropriate
+
+---
+
+# DOCUMENTATION MENU
+
+Documentation should explain concepts such as:
+
+- What is BOLA / IDOR?
+- What is Excessive Data Exposure?
+- Authentication vs Authorization
+- Rate limiting
+- How SentinelAPI works
+- How scanning works
+
+Example:
+
+Documentation
+
+> What is BOLA / IDOR?
+  Excessive Data Exposure
+  Authentication
+  Rate Limiting
+  How SentinelAPI works
+  Exit
+
+---
+
+# ADD API FLOW
+
+User chooses:
+
+[2] Add API
+
+Then:
+
+Add API
+
+> OpenAPI / Swagger file
+  Live API
+  Back
+
+For MVP, OpenAPI/Swagger is the important path.
+
+Example:
+
+Enter OpenAPI path:
+› ./openapi.yaml
+
+Then SentinelAPI should parse it:
+
+✓ Specification loaded
+✓ 42 endpoints discovered
+✓ Authentication scheme: Bearer JWT
+
+The API should then become available under the "Use an API" section.
+
+---
+
+# USE AN API FLOW
+
+Example:
+
+Available APIs
+
+[1] SandboxAPI
+[2] PetStore
+[3] MyAPI
+
+Select API ›
+
+After selecting:
+
+Show a persistent top status/header:
+
+SENTINELAPI
+API: SandboxAPI
+Auth: Bearer JWT
+Target: http://localhost:8000
+Test: BOLA / IDOR
+
+The user should always know:
+- which API is selected
+- target URL
+- authentication method
+- current scanner/test
+
+---
+
+# VULNERABILITY SELECTION
+
+After selecting an API:
+
+Select security tests:
+
+[ ] 1. BOLA / IDOR
+[ ] 2. Excessive Data Exposure
+[ ] 3. Authentication Misconfiguration
+[ ] 4. Rate Limiting
+[ ] 5. Run All
+
+Use:
+↑ ↓ = navigate
+Space = select
+Enter = continue
+
+Initially, only implement the first two properly:
+
+1. BOLA / IDOR
+2. Excessive Data Exposure
+
+Architecture should allow additional vulnerability modules later.
+
+---
+
+# PRIMARY VULNERABILITY — BOLA / IDOR
+
+BOLA = Broken Object Level Authorization.
+
+The vulnerability happens when a user is authenticated but can access another user's resource simply by changing an object ID.
+
+Example:
+
+User A:
+
+GET /users/101/orders
+Authorization: Bearer USER_A
+
+→ 200 OK
+
+Then:
+
+GET /users/102/orders
+Authorization: Bearer USER_A
+
+If user 102 belongs to another user and the API returns:
+
+→ 200 OK
+
+then BOLA exists.
+
+The server authenticated User A correctly, but failed to verify whether User A is authorized to access resource 102.
+
+SentinelAPI should detect this automatically.
+
+Expected flow:
+
+User A
+  ↓
+GET /users/101/orders → 200 OK
+  ↓
+change ID
+  ↓
+GET /users/102/orders → 200 OK
+  ↓
+BOLA DETECTED
+
+Finding should contain:
+
+[HIGH] BOLA / IDOR
+
+Endpoint:
+GET /users/{userId}/orders
+
+Authenticated User:
+User A
+
+Original ID:
+101
+
+Modified ID:
+102
+
+Expected:
+403 Forbidden
+
+Actual:
+200 OK
+
+Impact:
+User A can access another user's resource.
+
+Then generate a reproducible PoC:
+
+curl -X GET \
+  http://localhost:8000/users/102/orders \
+  -H "Authorization: Bearer <token>"
+
+---
+
+# SECOND VULNERABILITY — EXCESSIVE DATA EXPOSURE
+
+Example:
+
+GET /api/users/101
+
+Expected response:
+
+{
+  "id": 101,
+  "name": "Yuvraj"
+}
+
+But vulnerable API returns unnecessary/sensitive fields:
+
+{
+  "id": 101,
+  "name": "Yuvraj",
+  "email": "...",
+  "phone": "...",
+  "password_hash": "...",
+  "internal_role": "admin",
+  "reset_token": "..."
+}
+
+SentinelAPI should inspect API responses and identify potentially sensitive/unnecessary fields.
+
+This scanner should eventually have configurable sensitive-field detection rather than blindly declaring every large response vulnerable.
+
+---
+
+# ENDPOINT SELECTION
+
+For selected vulnerability:
+
+Example:
+
+BOLA / IDOR Scanner
+
+Discovered endpoints:
+
+[1] GET    /users/{userId}
+[2] GET    /users/{userId}/orders
+[3] GET    /orders/{orderId}
+[4] PUT    /users/{userId}
+[5] DELETE /orders/{orderId}
+
+[5] Scan all endpoints
+
+User can select one or multiple endpoints.
+
+---
+
+# SCANNING EXPERIENCE
+
+Example:
+
+BOLA Scanner
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Target        : SandboxAPI
+Authentication: Bearer JWT
+Test          : BOLA / IDOR
+Endpoints     : 5
+
+[1/5] GET /users/{userId}
+      Testing object authorization...
+      ✓ Protected
+
+[2/5] GET /users/{userId}/orders
+      Testing ID manipulation...
+      ⚠ VULNERABILITY FOUND
+
+[3/5] GET /orders/{orderId}
+      Testing ID manipulation...
+      ✓ Protected
+
+At completion:
+
+SCAN COMPLETE
+
+Critical   0
+High       1
+Medium     0
+Low        0
+
+HIGH — BOLA / IDOR
+
+Endpoint:
+GET /users/{userId}/orders
+
+Expected:
+403 Forbidden
+
+Received:
+200 OK
+
+Unauthorized object:
+userId = 102
+
+Options:
+
+[1] View PoC
+[2] View details
+[3] Export report
+[4] Back
+
+---
+
+# BACKEND FOR TESTING
+
+We will NOT initially connect a real production backend.
+
+We will build our own intentionally vulnerable sandbox API.
+
+Technology:
+FastAPI
+
+Target:
+localhost:8000
+
+This sandbox exists specifically so SentinelAPI can scan it.
+
+Architecture:
+
+                 SentinelAPI
+                     │
+                     │ scans
+                     ↓
+        ┌─────────────────────────┐
+        │   Vulnerable Sandbox API │
+        │                          │
+        │   FastAPI                │
+        │   localhost:8000         │
+        └─────────────────────────┘
+
+The sandbox will deliberately contain vulnerabilities.
+
+---
+
+# DATABASE
+
+DO NOT add a database initially.
+
+Use in-memory data.
+
+Example:
+
+users = {
+    101: {
+        "name": "Yuvraj",
+        "email": "yuvraj@example.com"
+    },
+    102: {
+        "name": "Rahul",
+        "email": "rahul@example.com"
+    }
+}
+
+orders = {
+    501: {
+        "user_id": 101,
+        "amount": 1200
+    },
+    502: {
+        "user_id": 102,
+        "amount": 2500
+    }
+}
+
+This keeps the MVP simple.
+
+Later, PostgreSQL/Supabase can be added if needed.
+
+---
+
+# TEST CASES
+
+We need BOTH:
+
+1. Vulnerable sandbox backend
+2. Automated tests for SentinelAPI
+
+Structure:
+
+sandbox/
+    vulnerable_api.py
+
+tests/
+    test_bola.py
+    test_exposure.py
+    test_auth.py
+
+Example test concept:
+
+User A accesses User B's resource.
+
+Expected:
+SentinelAPI detects BOLA.
+
+Tests should verify the scanner, not replace the actual scanning system.
+
+---
+
+# OPENAPI
+
+The sandbox API should expose an OpenAPI specification.
+
+SentinelAPI should ingest the sandbox's OpenAPI JSON/YAML.
+
+End-to-end flow:
+
+Vulnerable FastAPI
+       ↓
+OpenAPI specification
+       ↓
+SentinelAPI
+       ↓
+Parse endpoints
+       ↓
+Select vulnerability
+       ↓
+Run tests
+       ↓
+Collect evidence
+       ↓
+Severity engine
+       ↓
+PoC generator
+       ↓
+Terminal report
+
+This is important because we want the scanner to actually consume the API's specification rather than relying on hardcoded endpoints.
+
+---
+
+# PROJECT STRUCTURE
+
+Initial planned structure:
+
+sentinelapi/
+├── scanner/
+│   ├── __init__.py
+│   ├── openapi_parser.py
+│   ├── endpoint_discovery.py
+│   ├── bola_scanner.py
+│   ├── exposure_scanner.py
+│   ├── auth_scanner.py
+│   ├── rate_limit_scanner.py
+│   ├── poc_generator.py
+│   └── severity.py
+│
+├── api/
+│   └── main.py
+│
+├── sandbox/
+│   └── vulnerable_api.py
+│
+├── dashboard/
+│   └── ...
+│
+├── reports/
+├── tests/
+├── requirements.txt
+└── README.md
+
+CLI/UI files can be added as needed.
+
+---
+
+# INITIAL IMPLEMENTATION ORDER
+
+Do NOT build everything at once.
+
+Build in this order:
+
+STEP 1
+Create project structure.
+
+STEP 2
+Build the FastAPI vulnerable sandbox.
+
+STEP 3
+Make the sandbox expose OpenAPI.
+
+STEP 4
+Create the SentinelAPI CLI.
+
+STEP 5
+Implement startup/loading animation.
+
+STEP 6
+Implement interactive arrow + number navigation.
+
+STEP 7
+Implement Documentation menu.
+
+STEP 8
+Implement Add API.
+
+STEP 9
+Implement API selection.
+
+STEP 10
+Implement vulnerability selection.
+
+STEP 11
+Implement OpenAPI parser + endpoint discovery.
+
+STEP 12
+Implement BOLA scanner.
+
+STEP 13
+Implement evidence collection.
+
+STEP 14
+Implement severity classification.
+
+STEP 15
+Implement PoC generation.
+
+STEP 16
+Implement Excessive Data Exposure scanner.
+
+STEP 17
+Add automated tests.
+
+STEP 18
+Polish terminal UX.
+
+STEP 19
+Only if time remains, add additional scanners/dashboard/LLM features.
+
+---
+
+# IMPORTANT ARCHITECTURE PRINCIPLE
+
+Make vulnerability scanners modular.
+
+For example:
+
+scanner/
+    bola_scanner.py
+    exposure_scanner.py
+    auth_scanner.py
+    rate_limit_scanner.py
+
+Each scanner should expose a clean interface so we can add future vulnerability types without rewriting the CLI.
+
+Potential future scanners:
+
+- JWT issues
+- CORS misconfiguration
+- Authentication issues
+- Rate limiting
+- Multi-step authorization flaws
+- Other API security checks
+
+But DO NOT implement all of these initially.
+
+---
+
+# RECOMMENDED STACK
+
+Backend / sandbox:
+Python
+FastAPI
+Pydantic
+
+HTTP testing:
+httpx
+
+OpenAPI:
+Python OpenAPI parsing libraries / YAML parser as appropriate
+
+Testing:
+pytest
+
+CLI:
+Python CLI framework / terminal rendering library as appropriate.
+
+Possible choices:
+Rich
+Typer
+
+The CLI should look polished and interactive.
+
+Database:
+None initially.
+
+Frontend:
+None initially.
+
+---
+
+# PRODUCT PHILOSOPHY
+
+The scanner should prioritize:
+
+1. Precision
+2. Explainability
+3. Reproducibility
+4. Clear evidence
+5. Good developer experience
+
+Avoid creating a fake scanner that simply prints:
+
+"Vulnerability found!"
+
+Every finding should have evidence explaining WHY it was detected.
+
+Example:
+
+Original request
+↓
+Modified request
+↓
+Expected authorization response
+↓
+Actual response
+↓
+Finding
+↓
+PoC
+
+---
+
+# HACKATHON MVP
+
+The most important working demo is:
+
+1. Start SentinelAPI.
+2. Loading animation.
+3. Interactive terminal menu.
+4. Add/select SandboxAPI.
+5. Parse its OpenAPI specification.
+6. Select BOLA.
+7. Select endpoint.
+8. SentinelAPI authenticates as test user.
+9. Changes object ID.
+10. Sends request.
+11. Detects unauthorized access.
+12. Shows HIGH severity.
+13. Shows evidence.
+14. Generates reproducible curl PoC.
+15. Optionally export report.
+
+Then demonstrate Excessive Data Exposure.
+
+---
+
+# CURRENT DECISION
+
+We are building this ourselves from scratch.
+
+Do NOT simply clone or copy existing GitHub scanners.
+
+Existing projects such as:
+- cerberauth/vulnapi
+- cloudchefs/openapi-security-scanner
+- Teycir/ApiHunter
+- projectdiscovery/nuclei
+- ZAP API Scan
+
+can be studied for architecture/ideas, but SentinelAPI should have its own implementation.
+
+---
+
+# CURRENT STATE
+
+We have NOT started coding yet.
+
+The next immediate task is:
+
+1. Create the project directory.
+2. Create Python virtual environment.
+3. Install initial dependencies.
+4. Create the vulnerable FastAPI sandbox.
+5. Run it on localhost:8000.
+6. Verify the OpenAPI docs/spec.
+7. Then begin the SentinelAPI CLI.
+
+IMPORTANT:
+Work step-by-step.
+Do not dump the entire project at once.
+After each major step, verify that it works before continuing.
+
+The user prefers terminal-first development and wants commands that can be copied directly into the terminal.

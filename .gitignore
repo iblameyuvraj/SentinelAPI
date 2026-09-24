@@ -1,0 +1,39 @@
+# Environments & Secrets
+.venv/
+env/
+venv/
+.env
+.env.*
+!.env.example
+
+# Python Cache & Bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Packaging & Build Artifacts
+build/
+dist/
+*.egg-info/
+*.egg
+
+# Testing & Coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# macOS System Files
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# IDEs & Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Scan Reports (exclude generated vulnerability reports, keep folder)
+reports/*.json
+reports/*.md
+!reports/.gitkeep
