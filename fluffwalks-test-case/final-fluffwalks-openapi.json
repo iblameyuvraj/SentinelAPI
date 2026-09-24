@@ -1,18 +1,22 @@
 {
-  "openapi": "3.0.0",
+  "openapi": "3.0.3",
   "info": {
-    "title": "Fluffwalks Web API - BOLA & IDOR Security Test Suite",
-    "description": "Comprehensive OpenAPI security assessment specification for Fluffwalks (fluffwalks.in). Targets candidate object-level endpoints across Customer, Boarder, Payment, and Admin domains to audit OWASP API1:2023 Broken Object Level Authorization boundaries.",
-    "version": "1.0.0"
+    "title": "Fluffwalks Web API — Complete Security Assessment Suite",
+    "description": "Unified OpenAPI specification for Fluffwalks (fluffwalks.in). Consolidates all security audit endpoints spanning BOLA/IDOR, Excessive Data Exposure, Authentication Misconfiguration, Rate Limiting, BFLA/Privilege Escalation, Security Misconfiguration (Headers & Cookies), and Shadow/Zombie API Discovery across Customer, Boarder, Payment, and Admin domains.",
+    "version": "1.0.0",
+    "contact": {
+      "name": "Yuvraj Soni",
+      "email": "yuvrajjsoni17@gmail.com"
+    }
   },
   "servers": [
     {
       "url": "https://www.fluffwalks.in",
-      "description": "Production Live Server (fluffwalks.in)"
+      "description": "Fluffwalks Live Production Server"
     },
     {
       "url": "http://localhost:3000",
-      "description": "Local Next.js Development Server"
+      "description": "Fluffwalks Local Next.js Development Server"
     }
   ],
   "components": {
@@ -22,6 +26,12 @@
         "scheme": "bearer",
         "bearerFormat": "JWT",
         "description": "Supabase Auth JWT Token (e.g. Bearer eyJhbGciOi...)"
+      },
+      "cookieAuth": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "sb-lbvrdowxiffmoacfuoiy-auth-token",
+        "description": "Supabase session cookie (split-cookie format)"
       }
     },
     "schemas": {
@@ -67,15 +77,47 @@
     }
   },
   "security": [
-    {
-      "SupabaseBearerAuth": []
-    }
+    { "SupabaseBearerAuth": [] }
   ],
   "paths": {
+    "/api/user/profile": {
+      "get": {
+        "summary": "Customer Profile & Addresses (Excessive Data Exposure Vector)",
+        "description": "Audits user profile, contact info, pets array, and address records for PII leaks, unnecessary field exposure, and sensitive data leakage.",
+        "tags": ["Excessive Data Exposure", "User"],
+        "responses": {
+          "200": { "description": "Profile data with potential PII leakage" },
+          "401": { "description": "Unauthorized" }
+        }
+      }
+    },
+    "/api/user/rides": {
+      "get": {
+        "summary": "Customer Dog Walking Bookings (Excessive Data Exposure Vector)",
+        "description": "Audits booked ride records, live GPS locations, and payment amounts for data leaks.",
+        "tags": ["Excessive Data Exposure", "User"],
+        "responses": {
+          "200": { "description": "Rides list with potential data leakage" },
+          "401": { "description": "Unauthorized" }
+        }
+      }
+    },
+    "/api/user/boardings": {
+      "get": {
+        "summary": "Customer Home Boarding Bookings (Excessive Data Exposure Vector)",
+        "description": "Audits home boarding stay records, boarder PII assignments, and location data for excessive exposure.",
+        "tags": ["Excessive Data Exposure", "User"],
+        "responses": {
+          "200": { "description": "Boardings list with potential data leakage" },
+          "401": { "description": "Unauthorized" }
+        }
+      }
+    },
     "/api/user/{userId}/profile": {
       "get": {
         "summary": "User Profile (BOLA Test Vector)",
         "description": "Verifies that an authenticated customer cannot retrieve the profile, contact information, and address of a different tenant by altering the userId.",
+        "tags": ["BOLA / IDOR", "User"],
         "parameters": [
           {
             "name": "userId",
@@ -98,12 +140,8 @@
               }
             }
           },
-          "401": {
-            "description": "Unauthorized"
-          },
-          "403": {
-            "description": "Forbidden - Object authorization denied"
-          }
+          "401": { "description": "Unauthorized" },
+          "403": { "description": "Forbidden - Object authorization denied" }
         }
       }
     },
@@ -111,6 +149,7 @@
       "get": {
         "summary": "Customer Ride History (BOLA Test Vector)",
         "description": "Audits whether User B can view the private dog walking / ride bookings of User A by requesting User A's userId.",
+        "tags": ["BOLA / IDOR", "User"],
         "parameters": [
           {
             "name": "userId",
@@ -136,12 +175,8 @@
               }
             }
           },
-          "401": {
-            "description": "Unauthorized"
-          },
-          "403": {
-            "description": "Forbidden"
-          }
+          "401": { "description": "Unauthorized" },
+          "403": { "description": "Forbidden" }
         }
       }
     },
@@ -149,6 +184,7 @@
       "get": {
         "summary": "Customer Boarding History (BOLA Test Vector)",
         "description": "Audits whether User B can view the pet boarding bookings and home stay locations of User A.",
+        "tags": ["BOLA / IDOR", "User"],
         "parameters": [
           {
             "name": "userId",
@@ -174,12 +210,8 @@
               }
             }
           },
-          "401": {
-            "description": "Unauthorized"
-          },
-          "403": {
-            "description": "Forbidden"
-          }
+          "401": { "description": "Unauthorized" },
+          "403": { "description": "Forbidden" }
         }
       }
     },
@@ -187,6 +219,7 @@
       "post": {
         "summary": "Boarder Stay Status Update (BOLA / IDOR Verification)",
         "description": "Audits whether a rogue boarder or arbitrary authenticated user can transition a stay status (e.g. to 'completed') for a booking they are not assigned to.",
+        "tags": ["BOLA / IDOR", "Boarder"],
         "parameters": [
           {
             "name": "bookingId",
@@ -201,15 +234,9 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": "Status updated successfully"
-          },
-          "401": {
-            "description": "Unauthorized"
-          },
-          "403": {
-            "description": "Forbidden — user is not the assigned boarder"
-          }
+          "200": { "description": "Status updated successfully" },
+          "401": { "description": "Unauthorized" },
+          "403": { "description": "Forbidden — user is not the assigned boarder" }
         }
       }
     },
@@ -217,6 +244,7 @@
       "post": {
         "summary": "Razorpay Order Cancellation (IDOR Prevention Check)",
         "description": "Tests if a user can cancel another customer's pending order or delete their pending booking records by guessing razorpay_order_id.",
+        "tags": ["BOLA / IDOR", "Payment"],
         "parameters": [
           {
             "name": "orderId",
@@ -230,22 +258,17 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": "Order cancelled"
-          },
-          "401": {
-            "description": "Unauthorized"
-          },
-          "403": {
-            "description": "Forbidden — payment record does not belong to user"
-          }
+          "200": { "description": "Order cancelled" },
+          "401": { "description": "Unauthorized" },
+          "403": { "description": "Forbidden — payment record does not belong to user" }
         }
       }
     },
     "/api/admin/rides/{rideId}/complete": {
       "post": {
-        "summary": "Admin Ride Completion & Referral Award (Privilege Escalation Vector)",
+        "summary": "Admin Ride Completion & Referral Award (BFLA / Privilege Escalation Vector)",
         "description": "Tests if a regular authenticated user can invoke the ride completion endpoint to trigger commission & status changes on an arbitrary ride ID.",
+        "tags": ["BFLA / Privilege Escalation", "Admin"],
         "parameters": [
           {
             "name": "rideId",
@@ -260,22 +283,17 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": "Ride completed"
-          },
-          "401": {
-            "description": "Unauthorized"
-          },
-          "403": {
-            "description": "Forbidden — admin privileges required"
-          }
+          "200": { "description": "Ride completed" },
+          "401": { "description": "Unauthorized" },
+          "403": { "description": "Forbidden — admin privileges required" }
         }
       }
     },
     "/api/admin/partners/{partnerId}/verify": {
       "post": {
-        "summary": "Admin Partner Verification (BOLA / Admin Bypass Vector)",
+        "summary": "Admin Partner Verification (BFLA / Admin Bypass Vector)",
         "description": "Audits whether a non-admin user can approve or reject boarding partners by supplying arbitrary partner IDs.",
+        "tags": ["BFLA / Privilege Escalation", "Admin"],
         "parameters": [
           {
             "name": "partnerId",
@@ -290,15 +308,9 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": "Partner status updated"
-          },
-          "401": {
-            "description": "Unauthorized"
-          },
-          "403": {
-            "description": "Forbidden"
-          }
+          "200": { "description": "Partner status updated" },
+          "401": { "description": "Unauthorized" },
+          "403": { "description": "Forbidden" }
         }
       }
     }

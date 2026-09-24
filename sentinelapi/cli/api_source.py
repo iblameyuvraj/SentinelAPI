@@ -217,6 +217,11 @@ def render_vulnerability_menu(spec: ParsedSpecification):
         if not chosen_test or chosen_test.startswith("9."):
             return
 
+        if "1. Scan all" in chosen_test:
+            from sentinelapi.features.master_scan import run_master_scan
+            run_master_scan(spec)
+            continue
+
         if "2. BOLA / IDOR" in chosen_test:
             run_bola_idor_flow(spec)
             continue
@@ -241,43 +246,12 @@ def render_vulnerability_menu(spec: ParsedSpecification):
             run_bfla_flow(spec)
             continue
 
-        if "7. Security Misconfiguration" in chosen_test:
-            from sentinelapi.features.Security_Misconfiguration import run_sec_misconfig_flow
-            run_sec_misconfig_flow(spec)
-            continue
-
+   
+   
         if "8. Shadow" in chosen_test:
             from sentinelapi.features.Shadow_Zombie_APIs import run_shadow_zombie_flow
             run_shadow_zombie_flow(spec)
             continue
-
-        # UI Preview Card for remaining modules
-        console.print()
-        preview_table = Table(box=None, show_header=False, padding=(0, 2))
-        preview_table.add_column("Key", style="bold cyan")
-        preview_table.add_column("Val", style="bold white")
-
-        preview_table.add_row("Selected Test:", chosen_test)
-        preview_table.add_row("Target API:", f"{spec.title} ({spec.base_url})")
-        preview_table.add_row(
-            "Target Endpoints:",
-            f"{len(spec.parameterized_endpoints)} routes" if "BOLA" in chosen_test else f"{len(spec.endpoints)} routes",
-        )
-        preview_table.add_row("Status:", "[bold yellow]Ready for AI Test Generation & Execution[/bold yellow]")
-
-        console.print(
-            Panel(
-                preview_table,
-                title="[bold yellow]AI TEST EXECUTION PREVIEW[/bold yellow]",
-                border_style="yellow",
-                padding=(1, 2),
-            )
-        )
-        console.print("[dim]UI mode active. Ready for scanning logic integration.[/dim]\n")
-        try:
-            questionary.press_any_key_to_continue("Press any key to continue...").ask()
-        except (KeyboardInterrupt, EOFError):
-            pass
 
 
 def handle_documentation_flow() -> Optional[ParsedSpecification]:
