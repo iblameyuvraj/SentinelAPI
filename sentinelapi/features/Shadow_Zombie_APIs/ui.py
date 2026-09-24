@@ -224,6 +224,9 @@ def display_shadow_zombie_results(
     elif vuln_findings:
         status_label = "[bold red]ACTION REQUIRED — SHADOW / ZOMBIE ASSETS DETECTED IN PRODUCTION[/bold red]"
         border_col = "red"
+    elif conn_err_count > 0:
+        status_label = f"[bold yellow]INCOMPLETE — {conn_err_count} PROBES FAILED / UNREACHABLE[/bold yellow]"
+        border_col = "yellow"
     else:
         status_label = "[bold green]COMPLIANT — CLEAN ASSET INVENTORY (ZERO SHADOW/ZOMBIE ROUTES)[/bold green]"
         border_col = "green"
@@ -235,7 +238,8 @@ def display_shadow_zombie_results(
         f"[bold white]Probes Evaluated:[/bold white]    {len(findings)} candidate routes scanned\n"
         f"[bold white]Undocumented Assets:[/bold white] [bold red]{len(vuln_findings)} detected live[/bold red] "
         f"([bold magenta]{crit_count} Critical[/bold magenta], [bold red]{high_count} High[/bold red], [bold yellow]{med_count} Medium[/bold yellow])\n"
-        f"[bold white]Inventory Status:[/bold white]   {status_label}",
+        f"[bold white]Probe Failures:[/bold white]      {conn_err_count} Unreachable\n"
+        f"[bold white]Inventory Status:[/bold white]    {status_label}",
         title="[bold yellow]INVENTORY AUDIT SUMMARY — OWASP API9:2023[/bold yellow]",
         border_style=border_col,
         padding=(0, 2),

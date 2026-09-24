@@ -253,7 +253,7 @@ def run_live_bfla_scan(spec: ParsedSpecification, config: Dict[str, Any]):
 
                 progress.advance(task, 1)
 
-    display_bfla_results(spec, findings, config)
+    return display_bfla_results(spec, findings, config)
 
 
 def display_bfla_results(
@@ -319,6 +319,9 @@ def display_bfla_results(
     elif vuln_findings:
         status_label = "[bold red]ACTION REQUIRED — PRIVILEGE ESCALATION FLAWS DETECTED[/bold red]"
         border_col = "red"
+    elif conn_err_count > 0:
+        status_label = f"[bold yellow]INCOMPLETE — {conn_err_count} PROBES FAILED / UNREACHABLE[/bold yellow]"
+        border_col = "yellow"
     elif auth_err_count > 0:
         status_label = "[bold yellow]INCONCLUSIVE — TOKEN REJECTED BY SERVER (HTTP 401 UNAUTHORIZED)[/bold yellow]"
         border_col = "yellow"

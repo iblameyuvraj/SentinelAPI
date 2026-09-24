@@ -234,8 +234,7 @@ def run_live_exposure_scan(spec: ParsedSpecification, config: Dict[str, Any]):
 
                 status_code = 0
                 resp_json = None
-                raw_text = ""
-
+                conn_err = None
                 try:
                     resp = client.request(ep.method, target_url, headers=headers)
                     status_code = resp.status_code
@@ -246,9 +245,10 @@ def run_live_exposure_scan(spec: ParsedSpecification, config: Dict[str, Any]):
                         resp_json = None
                 except Exception as e:
                     status_code = 0
-                    raw_text = f"Connection error: {str(e)}"
+                    conn_err = str(e)
+                    raw_text = f"Connection error: {conn_err}"
 
-                # Run detector on response data
+                # Run detector on response data only if we got a real response
                 if resp_json is not None:
                     analysis = analyze_endpoint_exposure(resp_json)
                 else:
@@ -267,14 +267,15 @@ def run_live_exposure_scan(spec: ParsedSpecification, config: Dict[str, Any]):
                     "response_json": resp_json,
                     "raw_text": raw_text,
                     "analysis": analysis,
-                    "is_vulnerable": analysis["is_vulnerable"],
+                    "is_vulnerable": analysis["is_vulnerable"] and status_code > 0,
+                    "probe_error": conn_err,
                 })
 
                 time.sleep(0.15)
                 progress.advance(task)
 
     # Render results table
-    render_exposure_results_and_remediation(spec, results, config)
+    return render_exposure_results_and_remediation(spec, results, config)
 
 
 def render_exposure_results_and_remediation(
@@ -296,13 +297,26 @@ def render_exposure_results_and_remediation(
 
     vuln_count = 0
     secured_count = 0
+    error_count = 0
 
     for r in results:
         ep = r["endpoint"]
         ana = r["analysis"]
         is_vuln = r["is_vulnerable"]
+        probe_err = r.get("probe_error")
 
-        if is_vuln:
+        if probe_err or r["status_code"] == 0:
+            error_count += 1
+            verdict = "[bold red]ERROR (UNREACHABLE)[/bold red]"
+            t.add_row(
+                ep.method,
+                ep.path,
+                "[bold red]HTTP 0 (FAIL)[/bold red]",
+                "[dim]-[/dim]",
+                "[red]PROBE_ERROR[/red]",
+                verdict,
+            )
+        elif is_vuln:
             vuln_count += 1
             sev = ana["severity"]
             sev_style = "bold red" if sev == "CRITICAL" else "bold yellow"
@@ -330,20 +344,33 @@ def render_exposure_results_and_remediation(
     console.print(t)
     console.print()
 
-    # Executive Summary Card
-    score_style = "bold red" if vuln_count > 0 else "bold green"
+    # Executive Summary Card (Fail-Closed)
+    if error_count == len(results):
+        overall_verdict = "[bold red]ERROR: TARGET UNREACHABLE (0 PROBES SUCCEEDED)[/bold red]"
+        card_border = "red"
+    elif vuln_count > 0:
+        overall_verdict = "[bold red]CRITICAL RISK: SENSITIVE DATA EXPOSURE DETECTED (OWASP API3:2023)[/bold red]"
+        card_border = "red"
+    elif error_count > 0:
+        overall_verdict = f"[bold yellow]INCOMPLETE: {error_count} PROBES FAILED / UNREACHABLE[/bold yellow]"
+        card_border = "yellow"
+    else:
+        overall_verdict = "[bold green]COMPLIANT: ZERO SENSITIVE DATA EXPOSURE (PASSED)[/bold green]"
+        card_border = "green"
+
     summary_text = (
-        f" [bold white]Total Candidate Endpoints Tested:[/bold white] {len(results)}\n"
+        f" [bold white]Total Candidate Endpoints:[/bold white]   {len(results)}\n"
         f" [bold red]Vulnerabilities Identified:[/bold red]      {vuln_count} Data Exposure Flaws\n"
-        f" [bold green]Protected / Clean Endpoints:[/bold green]       {secured_count} Validated Secure\n"
-        f" [bold white]Overall Exposure Risk:[/bold white]           [{score_style}]{'CRITICAL RISK (OWASP API3:2023)' if vuln_count > 0 else 'LOW / ZERO RISK (PASSED)'}[/{score_style}]"
+        f" [bold green]Clean Responses Verified:[/bold green]        {secured_count} Endpoints Inspected\n"
+        f" [bold yellow]Probe Connection Failures:[/bold yellow]       {error_count} Unreachable / Failed\n"
+        f" [bold white]Assessment Posture:[/bold white]             {overall_verdict}"
     )
 
     console.print(
         Panel(
             summary_text,
-            title="[bold cyan]EXECUTIVE SUMMARY[/bold cyan]",
-            border_style="cyan" if vuln_count == 0 else "red",
+            title="[bold cyan]EXECUTIVE AUDIT SUMMARY[/bold cyan]",
+            border_style=card_border,
             padding=(1, 2),
         )
     )

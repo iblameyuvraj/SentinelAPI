@@ -279,7 +279,7 @@ def run_live_auth_scan(spec: ParsedSpecification, config: Dict[str, Any]):
 
                     progress.advance(task, 1)
 
-    display_auth_results(spec, findings, config)
+    return display_auth_results(spec, findings, config)
 
 
 def display_auth_results(
@@ -310,6 +310,9 @@ def display_auth_results(
         if f.is_vulnerable:
             verdict_badge = "[bold red]VULNERABLE[/bold red]"
             sev_badge = f"[bold red]{f.severity}[/bold red]" if f.severity == "CRITICAL" else f"[bold yellow]{f.severity}[/bold yellow]"
+        elif f.status_code == 0:
+            verdict_badge = "[bold red]ERROR (UNREACHABLE)[/bold red]"
+            sev_badge = "[red]PROBE_ERROR[/red]"
         elif f.status_code in (401, 403):
             verdict_badge = "[bold green]PROTECTED[/bold green]"
             sev_badge = "[dim]CLEAR[/dim]"
@@ -321,23 +324,37 @@ def display_auth_results(
 
     console.print(t)
 
-    # Summary Statistics
+    # Summary Statistics (Fail-Closed)
+    vuln_findings = [f for f in findings if f.is_vulnerable]
+    conn_err_count = sum(1 for f in findings if f.status_code == 0)
     critical_count = sum(1 for f in vuln_findings if f.severity == "CRITICAL")
     high_count = sum(1 for f in vuln_findings if f.severity == "HIGH")
     medium_count = sum(1 for f in vuln_findings if f.severity == "MEDIUM")
 
-    status_label = "[bold red]ACTION REQUIRED[/bold red]" if vuln_findings else "[bold green]COMPLIANT — ALL BOUNDARIES SECURE[/bold green]"
+    if conn_err_count == len(findings):
+        status_label = "[bold red]ERROR — TARGET SERVER UNREACHABLE (0 PROBES SUCCEEDED)[/bold red]"
+        card_border = "red"
+    elif vuln_findings:
+        status_label = "[bold red]ACTION REQUIRED — BROKEN AUTHENTICATION VULNERABILITIES DETECTED[/bold red]"
+        card_border = "red"
+    elif conn_err_count > 0:
+        status_label = f"[bold yellow]INCOMPLETE — {conn_err_count} PROBE(S) FAILED / UNREACHABLE[/bold yellow]"
+        card_border = "yellow"
+    else:
+        status_label = "[bold green]COMPLIANT — ALL BOUNDARIES SECURE[/bold green]"
+        card_border = "green"
 
     console.print()
     stats_panel = Panel(
-        f"[bold white]Total Probes Run:[/bold white]     {len(findings)}\n"
-        f"[bold white]Vulnerabilities Found:[/bold white] [bold red]{len(vuln_findings)}[/bold red]\n"
+        f"[bold white]Total Probes Run:[/bold white]       {len(findings)}\n"
+        f"[bold white]Vulnerabilities Found:[/bold white]  [bold red]{len(vuln_findings)}[/bold red]\n"
         f"  • [bold red]CRITICAL:[/bold red] {critical_count} (Missing auth, alg:none bypass, unverified signatures)\n"
         f"  • [bold yellow]HIGH:[/bold yellow]     {high_count} (Expired tokens accepted)\n"
         f"  • [bold cyan]MEDIUM:[/bold cyan]   {medium_count} (Verbose 500 stack trace leaks)\n"
-        f"[bold white]Status:[/bold white] {status_label}",
+        f"[bold white]Probe Failures:[/bold white]        {conn_err_count} Unreachable / Failed\n"
+        f"[bold white]Audit Status:[/bold white]          {status_label}",
         title="[bold yellow]AUDIT SUMMARY[/bold yellow]",
-        border_style="red" if vuln_findings else "green",
+        border_style=card_border,
         padding=(0, 2),
     )
     console.print(stats_panel)

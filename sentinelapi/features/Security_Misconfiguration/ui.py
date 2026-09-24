@@ -180,7 +180,22 @@ def run_full_sec_misconfig_audit(spec: ParsedSpecification, config: Dict[str, An
                     all_findings.extend(findings)
 
                 except Exception as e:
-                    pass
+                    all_findings.append(
+                        SecurityMisconfigFinding(
+                            endpoint=ep.path,
+                            method=ep.method.upper(),
+                            test_id="SEC-00-CONN-ERR",
+                            test_name="Probe Connection Error / Host Unreachable",
+                            is_vulnerable=False,
+                            severity="NONE",
+                            category="Network / Transport Error",
+                            reason=f"Probe failed to reach {target_url}: {str(e)}",
+                            cwe="CWE-1188: Initialization of a Resource with Insecure Default Values",
+                            reproduction_curl=f"curl -s -i -X {ep.method} \"{target_url}\"",
+                            header_found="None (Connection Refused / Network Error)",
+                            remediation="Ensure target server is live, online, and accessible from scanner network.",
+                        )
+                    )
 
                 # Probe 2: CORS Origin Reflection Probe (Send Origin: https://evil-attacker.io)
                 try:
@@ -230,14 +245,26 @@ def display_sec_misconfig_results(
     console.clear()
 
     vuln_findings = [f for f in findings if f.is_vulnerable]
+    conn_err_findings = [f for f in findings if f.test_id == "SEC-00-CONN-ERR"]
     crit_count = sum(1 for f in vuln_findings if f.severity == "CRITICAL")
     high_count = sum(1 for f in vuln_findings if f.severity == "HIGH")
     med_count = sum(1 for f in vuln_findings if f.severity == "MEDIUM")
     low_count = sum(1 for f in vuln_findings if f.severity == "LOW")
 
     console.print()
-    # Executive Summary Card
-    status_label = "[bold red]ACTION REQUIRED — CRITICAL MISCONFIGURATIONS DETECTED[/bold red]" if vuln_findings else "[bold green]SECURITY POSTURE SECURED — ALL HEADERS ENFORCED[/bold green]"
+    # Executive Summary Card (Fail-Closed)
+    if len(conn_err_findings) == len(spec.endpoints) or len(findings) == 0:
+        status_label = "[bold red]ERROR — TARGET SERVER UNREACHABLE (0 PROBES SUCCEEDED)[/bold red]"
+        card_border = "red"
+    elif vuln_findings:
+        status_label = "[bold red]ACTION REQUIRED — CRITICAL MISCONFIGURATIONS DETECTED[/bold red]"
+        card_border = "red"
+    elif conn_err_findings:
+        status_label = f"[bold yellow]INCOMPLETE — {len(conn_err_findings)} PROBES FAILED / UNREACHABLE[/bold yellow]"
+        card_border = "yellow"
+    else:
+        status_label = "[bold green]SECURITY POSTURE SECURED — ALL HEADERS ENFORCED[/bold green]"
+        card_border = "green"
 
     stats_panel = Panel(
         f"[bold white]Target API:[/bold white]          [bold cyan]{spec.title}[/bold cyan] ({config.get('base_url')})\n"
@@ -245,9 +272,10 @@ def display_sec_misconfig_results(
         f"[bold white]Total Evaluated:[/bold white]     {len(findings)} checks across {len(spec.endpoints)} routes\n"
         f"[bold white]Vulnerabilities:[/bold white]     [bold red]{len(vuln_findings)} detected[/bold red] "
         f"([bold magenta]{crit_count} Critical[/bold magenta], [bold red]{high_count} High[/bold red], [bold yellow]{med_count} Medium[/bold yellow], [bold blue]{low_count} Low[/bold blue])\n"
+        f"[bold white]Probe Failures:[/bold white]      {len(conn_err_findings)} Unreachable\n"
         f"[bold white]Audit Status:[/bold white]        {status_label}",
         title="[bold yellow]AUDIT SUMMARY — OWASP API8:2023[/bold yellow]",
-        border_style="red" if vuln_findings else "green",
+        border_style=card_border,
         padding=(0, 2),
     )
     console.print(stats_panel)

@@ -254,7 +254,7 @@ def run_live_rate_limit_scan(spec: ParsedSpecification, config: Dict[str, Any]):
                 findings.append(finding)
                 progress.advance(task, 1)
 
-    display_rate_limit_results(spec, findings, config)
+    return display_rate_limit_results(spec, findings, config)
 
 
 def display_rate_limit_results(
@@ -269,7 +269,7 @@ def display_rate_limit_results(
     t.add_column("Endpoint", style="bold white")
     t.add_column("Method", justify="center")
     t.add_column("Burst", justify="center")
-    t.add_column("200 OK", justify="center", style="bold green")
+    t.add_column("HTTP Status", justify="center")
     t.add_column("429 Throttled", justify="center")
     t.add_column("Rate Limit Headers", justify="center")
     t.add_column("Verdict", justify="center")
@@ -282,12 +282,25 @@ def display_rate_limit_results(
         throttled_style = f"[bold green]{f.throttled_count}[/bold green]" if f.throttled_count > 0 else f"[bold red]0[/bold red]"
         headers_style = f"[bold green]Yes ({len(f.rate_limit_headers)})[/bold green]" if f.rate_limit_headers else "[dim]None[/dim]"
 
+        # Display HTTP status clearly
+        if f.primary_status == 0 or "Connection Error" in f.reason:
+            status_style = "[bold red]0 (Unreachable)[/bold red]"
+        elif f.primary_status == 429:
+            status_style = f"[bold green]429 ({f.throttled_count}/{f.total_requests})[/bold green]"
+        elif f.primary_status == 200:
+            status_style = f"[bold green]200 ({f.delivered_count}/{f.total_requests})[/bold green]"
+        else:
+            status_style = f"[yellow]{f.primary_status} ({f.delivered_count}/{f.total_requests})[/yellow]"
+
         if f.is_vulnerable:
             verdict_badge = "[bold red]VULNERABLE[/bold red]"
             sev_badge = f"[bold red]{f.severity}[/bold red]" if f.severity == "HIGH" else f"[bold yellow]{f.severity}[/bold yellow]"
         elif f.has_429:
             verdict_badge = "[bold green]PROTECTED[/bold green]"
             sev_badge = "[dim]CLEAR[/dim]"
+        elif f.primary_status == 0:
+            verdict_badge = "[bold red]ERROR (UNREACHABLE)[/bold red]"
+            sev_badge = "[red]PROBE_ERROR[/red]"
         else:
             verdict_badge = "[cyan]PASS (Public)[/cyan]"
             sev_badge = "[dim]NONE[/dim]"
@@ -296,7 +309,7 @@ def display_rate_limit_results(
             f.endpoint,
             method_style,
             str(f.total_requests),
-            str(f.success_count),
+            status_style,
             throttled_style,
             headers_style,
             verdict_badge,
@@ -305,12 +318,24 @@ def display_rate_limit_results(
 
     console.print(t)
 
-    # Summary Statistics Panel
+    # Summary Statistics Panel (Fail-Closed)
     high_count = sum(1 for f in vuln_findings if f.severity == "HIGH")
     medium_count = sum(1 for f in vuln_findings if f.severity == "MEDIUM")
     protected_count = sum(1 for f in findings if f.has_429)
+    conn_err_count = sum(1 for f in findings if f.primary_status == 0 or "Connection Error" in f.reason)
 
-    status_label = "[bold red]ACTION REQUIRED[/bold red]" if vuln_findings else "[bold green]COMPLIANT — ALL BOUNDARIES PROTECTED[/bold green]"
+    if conn_err_count == len(findings) and len(findings) > 0:
+        status_label = "[bold red]ERROR — TARGET SERVER UNREACHABLE (0 PROBES SUCCEEDED)[/bold red]"
+        card_border = "red"
+    elif vuln_findings:
+        status_label = "[bold red]ACTION REQUIRED — UNRESTRICTED ROUTES IDENTIFIED[/bold red]"
+        card_border = "red"
+    elif conn_err_count > 0:
+        status_label = f"[bold yellow]INCOMPLETE — {conn_err_count} ROUTE(S) FAILED / UNREACHABLE[/bold yellow]"
+        card_border = "yellow"
+    else:
+        status_label = "[bold green]COMPLIANT — ALL BOUNDARIES PROTECTED[/bold green]"
+        card_border = "green"
 
     console.print()
     stats_panel = Panel(
@@ -319,9 +344,10 @@ def display_rate_limit_results(
         f"[bold white]Unprotected Routes:[/bold white]    [bold red]{len(vuln_findings)}[/bold red]\n"
         f"  • [bold red]HIGH SEVERITY:[/bold red]   {high_count} (Sensitive auth, OTP, or export routes)\n"
         f"  • [bold yellow]MEDIUM SEVERITY:[/bold yellow] {medium_count} (Uncapped standard routes)\n"
-        f"[bold white]Status:[/bold white]             {status_label}",
+        f"[bold white]Probe Failures:[/bold white]        {conn_err_count} Unreachable\n"
+        f"[bold white]Audit Status:[/bold white]          {status_label}",
         title="[bold red]AUDIT SUMMARY[/bold red]",
-        border_style="red" if vuln_findings else "green",
+        border_style=card_border,
         padding=(0, 2),
     )
     console.print(stats_panel)
@@ -459,15 +485,24 @@ def save_rate_limit_markdown_report(
         "",
         "## Findings Matrix",
         "",
-        "| Endpoint | Method | Burst Reqs | 200 OK | 429 Throttled | Rate Limit Headers | Verdict | Severity |",
+        "| Endpoint | Method | Burst Reqs | Response Status | 429 Throttled | Rate Limit Headers | Verdict | Severity |",
         "| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |",
     ]
 
     for f in findings:
-        verdict = "**VULNERABLE**" if f.is_vulnerable else ("PROTECTED" if f.has_429 else "PASS (Public)")
+        verdict = "**VULNERABLE**" if f.is_vulnerable else ("PROTECTED" if f.has_429 else ("ERROR (Unreachable)" if f.primary_status == 0 else "PASS (Public)"))
         headers_str = "Yes" if f.rate_limit_headers else "None"
+        if f.primary_status == 0 or "Connection Error" in f.reason:
+            status_desc = "Host Unreachable (0)"
+        elif f.primary_status == 429:
+            status_desc = f"HTTP 429 ({f.throttled_count}/{f.total_requests})"
+        elif f.primary_status == 200:
+            status_desc = f"HTTP 200 ({f.delivered_count}/{f.total_requests})"
+        else:
+            status_desc = f"HTTP {f.primary_status} ({f.delivered_count}/{f.total_requests})"
+
         lines.append(
-            f"| `{f.endpoint}` | {f.method} | {f.total_requests} | {f.success_count} | {f.throttled_count} | {headers_str} | {verdict} | {f.severity} |"
+            f"| `{f.endpoint}` | {f.method} | {f.total_requests} | {status_desc} | {f.throttled_count} | {headers_str} | {verdict} | {f.severity} |"
         )
 
     if vuln_findings:

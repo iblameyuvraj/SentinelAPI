@@ -20,6 +20,8 @@ class RateLimitFinding:
     cwe: str
     reproduction_curl: str
     remediation: str
+    primary_status: int = 0
+    delivered_count: int = 0
 
 
 SENSITIVE_ROUTE_PATTERNS = [
@@ -102,6 +104,32 @@ def evaluate_rate_limit_results(
     )
 
     # Evaluation Rules:
+    conn_fail_count = status_codes.count(0)
+    delivered_count = sum(1 for s in status_codes if s > 0)
+    non_zero_codes = [s for s in status_codes if s > 0]
+    primary_status = max(set(non_zero_codes), key=non_zero_codes.count) if non_zero_codes else 0
+
+    # 0. Check for complete connection failure
+    if conn_fail_count == len(status_codes) and len(status_codes) > 0:
+        return RateLimitFinding(
+            endpoint=endpoint,
+            method=method,
+            total_requests=burst_count,
+            success_count=0,
+            throttled_count=0,
+            error_count=conn_fail_count,
+            has_429=False,
+            rate_limit_headers={},
+            is_vulnerable=False,
+            severity="NONE",
+            reason=f"Connection Error: All {burst_count} probes failed to reach {target_url} (Host Unreachable)",
+            cwe=cwe,
+            reproduction_curl=reproduction_curl,
+            remediation="Ensure target server is live, online, and accessible from scanner network.",
+            primary_status=0,
+            delivered_count=0,
+        )
+
     # 1. Endpoint returned 429 Too Many Requests: PROTECTED
     if has_429:
         is_vulnerable = False
@@ -120,9 +148,10 @@ def evaluate_rate_limit_results(
     elif is_sensitive:
         is_vulnerable = True
         severity = "HIGH"
+        status_disp = f"HTTP {primary_status}" if primary_status != 200 else "HTTP 200 OK"
         reason = (
-            f"HIGH VULNERABILITY: Sensitive route '{endpoint}' processed all {success_count}/{burst_count} requests "
-            f"without throttling or returning HTTP 429 (Brute-force / Abuse Risk)."
+            f"HIGH VULNERABILITY: Sensitive route '{endpoint}' processed all {delivered_count}/{burst_count} requests "
+            f"({status_disp}) without throttling or returning HTTP 429 (Brute-force / Abuse Risk)."
         )
         remediation = (
             "Implement strict IP & user-level rate limiting on sensitive routes. "
@@ -133,9 +162,10 @@ def evaluate_rate_limit_results(
     else:
         is_vulnerable = True
         severity = "MEDIUM"
+        status_disp = f"HTTP {primary_status}" if primary_status != 200 else "HTTP 200 OK"
         reason = (
-            f"MEDIUM VULNERABILITY: Endpoint permitted {burst_count} rapid requests with zero rate-limit headers "
-            f"or throttling."
+            f"MEDIUM VULNERABILITY: Endpoint permitted {delivered_count}/{burst_count} rapid requests "
+            f"({status_disp}) with zero rate-limit headers or throttling."
         )
         remediation = (
             "Enforce API gateway or reverse-proxy rate limiting (e.g. 60-120 req/min) "
@@ -157,4 +187,6 @@ def evaluate_rate_limit_results(
         cwe=cwe,
         reproduction_curl=reproduction_curl,
         remediation=remediation,
+        primary_status=primary_status,
+        delivered_count=delivered_count,
     )

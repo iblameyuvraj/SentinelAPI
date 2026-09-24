@@ -273,6 +273,8 @@ def run_assessment(spec: ParsedSpecification, endpoints: List[APIEndpointInfo], 
         questionary.press_any_key_to_continue("Press any key to return...").ask()
         return
 
+    target_base = config.get("base_url", spec.base_url).rstrip('/')
+
     # Assessment Progress
     with Progress(
         SpinnerColumn(spinner_name="dots"),
@@ -295,12 +297,13 @@ def run_assessment(spec: ParsedSpecification, endpoints: List[APIEndpointInfo], 
 
             # Fallback if any unknown variable remains
             resolved_path = re.sub(r"\{[^}]+\}", str(config.get("victim_id", "101")), resolved_path)
-            full_target_url = f"{spec.base_url.rstrip('/')}{resolved_path}"
+            full_target_url = f"{target_base}{resolved_path}"
 
             baseline_status = 200
             attack_status = 200
             is_vulnerable = False
             response_snippet = ""
+            probe_err = None
 
             headers_victim = {config["auth_header_name"]: config["victim_token"]}
             headers_attacker = {config["auth_header_name"]: config["attacker_token"]}
@@ -336,14 +339,20 @@ def run_assessment(spec: ParsedSpecification, endpoints: List[APIEndpointInfo], 
 
                 except Exception as e:
                     attack_status = 0
-                    response_snippet = f"Connection error: {str(e)}"
+                    probe_err = str(e)
+                    response_snippet = f"Connection error: {probe_err}"
                     is_vulnerable = False
-            else:
+            elif config.get("allow_simulation", False):
                 time.sleep(0.5)
                 is_vulnerable = "orders" in ep.path.lower()
                 baseline_status = 200
                 attack_status = 200 if is_vulnerable else 403
                 response_snippet = "Simulated response"
+            else:
+                attack_status = 0
+                probe_err = f"Target host {target_base} unreachable or offline"
+                response_snippet = probe_err
+                is_vulnerable = False
 
             results.append({
                 "endpoint": ep,
@@ -352,6 +361,7 @@ def run_assessment(spec: ParsedSpecification, endpoints: List[APIEndpointInfo], 
                 "attack_status": attack_status,
                 "target_url": full_target_url,
                 "response_snippet": response_snippet,
+                "probe_error": probe_err,
             })
             progress.advance(task)
 
@@ -373,10 +383,15 @@ def run_assessment(spec: ParsedSpecification, endpoints: List[APIEndpointInfo], 
 
     vuln_count = 0
     secured_count = 0
+    error_count = 0
 
     for res in results:
         ep = res["endpoint"]
-        if res["vulnerable"]:
+        if res.get("probe_error") or res["attack_status"] == 0:
+            error_count += 1
+            verdict = "[bold red]ERROR (UNREACHABLE)[/bold red]"
+            probe_str = f"[bold red]HTTP 0 Failed[/bold red]"
+        elif res["vulnerable"]:
             vuln_count += 1
             verdict = "[bold red]FAIL (BOLA Leaked)[/bold red]"
             probe_str = f"[bold red]HTTP {res['attack_status']} OK (Leaked)[/bold red]"
@@ -391,7 +406,7 @@ def run_assessment(spec: ParsedSpecification, endpoints: List[APIEndpointInfo], 
         result_table.add_row(
             ep.method,
             ep.path,
-            f"HTTP {res['baseline_status']} OK",
+            f"HTTP {res['baseline_status']} OK" if res["baseline_status"] > 0 else "[red]HTTP 0 (Failed)[/red]",
             probe_str,
             verdict,
         )
@@ -399,31 +414,44 @@ def run_assessment(spec: ParsedSpecification, endpoints: List[APIEndpointInfo], 
     console.print(result_table)
     console.print()
 
-    # Executive Summary Card
-    score_style = "bold red" if vuln_count > 0 else "bold green"
+    # Executive Summary Card (Fail-Closed)
+    if error_count == len(endpoints):
+        overall_risk = "[bold red]ERROR: TARGET UNREACHABLE (0 PROBES SUCCEEDED)[/bold red]"
+        card_border = "red"
+    elif vuln_count > 0:
+        overall_risk = "[bold red]CRITICAL RISK (OWASP API1:2023 - BOLA VULNERABILITIES DETECTED)[/bold red]"
+        card_border = "red"
+    elif error_count > 0:
+        overall_risk = f"[bold yellow]INCOMPLETE: {error_count} PROBES FAILED / UNREACHABLE[/bold yellow]"
+        card_border = "yellow"
+    else:
+        overall_risk = "[bold green]LOW / ZERO RISK (ALL VERIFIED OBJECT BOUNDARIES SECURE)[/bold green]"
+        card_border = "green"
+
     summary_text = (
-        f" [bold white]Total Candidate Endpoints Tested:[/bold white] {len(endpoints)}\n"
-        f" [bold red]Vulnerabilities Identified:[/bold red]      {vuln_count} Critical Authorization Flaws\n"
-        f" [bold green]Protected Endpoints:[/bold green]             {secured_count} Validated Secure\n"
-        f" [bold white]Overall BOLA Exposure Risk:[/bold white]     [{score_style}]{'CRITICAL RISK (OWASP API1)' if vuln_count > 0 else 'LOW / ZERO RISK (PASSED)'}[/{score_style}]"
+        f" [bold white]Total Candidate Endpoints:[/bold white] {len(endpoints)}\n"
+        f" [bold red]Vulnerabilities Identified:[/bold red]  {vuln_count} Critical Authorization Flaws\n"
+        f" [bold green]Protected Endpoints:[/bold green]         {secured_count} Validated Secure\n"
+        f" [bold yellow]Probe Connection Failures:[/bold yellow]   {error_count} Unreachable / Failed\n"
+        f" [bold white]Overall BOLA Exposure Risk:[/bold white] {overall_risk}"
     )
 
     console.print(
         Panel(
             summary_text,
             title="[bold cyan]EXECUTIVE SUMMARY[/bold cyan]",
-            border_style="cyan" if vuln_count == 0 else "red",
+            border_style=card_border,
             padding=(1, 2),
         )
     )
 
-    # SECURED CLEARANCE
-    if vuln_count == 0:
+    # SECURED CLEARANCE: only when verified with zero errors and all secured
+    if vuln_count == 0 and error_count == 0 and secured_count > 0:
         console.print()
         console.print(
             Panel(
                 "[bold green]✓ SECURITY CLEARANCE: ZERO BOLA / IDOR VULNERABILITIES DETECTED[/bold green]\n\n"
-                f" [bold white]Target Server:[/bold white]           [cyan]{spec.base_url}[/cyan]\n"
+                f" [bold white]Target Server:[/bold white]           [cyan]{target_base}[/cyan]\n"
                 " [bold white]OWASP API1:2023 Audit:[/bold white]   [bold green]PASSED[/bold green]\n"
                 " [bold white]Access Control Verdict:[/bold white]  Object ownership check strictly enforced.\n"
                 f" [bold white]Verification Detail:[/bold white]     Attacker token ({config['attacker_token']}) was properly denied access (HTTP 403 Forbidden)\n"
