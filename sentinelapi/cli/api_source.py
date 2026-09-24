@@ -199,7 +199,10 @@ def render_vulnerability_menu(spec: ParsedSpecification):
             "3. Excessive Data Exposure",
             "4. Authentication Misconfiguration",
             "5. Rate Limiting",
-            "6. Close SentinelAPI",
+            "6. BFLA & Privilege Escalation",
+            "7. Security Misconfiguration (Headers & Cookies)",
+            "8. Shadow & Zombie API Discovery",
+            "9. Close SentinelAPI",
         ]
 
         try:
@@ -211,7 +214,7 @@ def render_vulnerability_menu(spec: ParsedSpecification):
         except (KeyboardInterrupt, EOFError):
             return
 
-        if not chosen_test or chosen_test.startswith("6."):
+        if not chosen_test or chosen_test.startswith("9."):
             return
 
         if "2. BOLA / IDOR" in chosen_test:
@@ -231,6 +234,21 @@ def render_vulnerability_menu(spec: ParsedSpecification):
         if "5. Rate Limiting" in chosen_test:
             from sentinelapi.features.Rate_Limiting import run_rate_limiting_flow
             run_rate_limiting_flow(spec)
+            continue
+
+        if "6. BFLA" in chosen_test:
+            from sentinelapi.features.BFLA import run_bfla_flow
+            run_bfla_flow(spec)
+            continue
+
+        if "7. Security Misconfiguration" in chosen_test:
+            from sentinelapi.features.Security_Misconfiguration import run_sec_misconfig_flow
+            run_sec_misconfig_flow(spec)
+            continue
+
+        if "8. Shadow" in chosen_test:
+            from sentinelapi.features.Shadow_Zombie_APIs import run_shadow_zombie_flow
+            run_shadow_zombie_flow(spec)
             continue
 
         # UI Preview Card for remaining modules

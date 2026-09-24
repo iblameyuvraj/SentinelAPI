@@ -1,0 +1,47 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Production Inventory API (v2.0)",
+    "description": "Official published API specification for testing OWASP API9:2023 Improper Inventory Management, Shadow API Discovery, and Zombie API Decommissioning in SentinelAPI.",
+    "version": "2.0.0"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8012",
+      "description": "Local Vulnerable Shadow Backend (Port 8012)"
+    },
+    {
+      "url": "http://localhost:8013",
+      "description": "Local Hardened Inventory Backend (Port 8013)"
+    }
+  ],
+  "paths": {
+    "/api/public/ping": {
+      "get": {
+        "summary": "Check public service health",
+        "description": "Official health check endpoint.",
+        "responses": {
+          "200": { "description": "Service status" }
+        }
+      }
+    },
+    "/api/v2/users": {
+      "get": {
+        "summary": "Retrieve active user list (v2)",
+        "description": "Official sanitized user listing endpoint.",
+        "responses": {
+          "200": { "description": "List of active users" }
+        }
+      }
+    },
+    "/api/v2/products": {
+      "get": {
+        "summary": "Retrieve product catalog (v2)",
+        "description": "Official catalog endpoint.",
+        "responses": {
+          "200": { "description": "Product catalog" }
+        }
+      }
+    }
+  }
+}

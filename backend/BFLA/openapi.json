@@ -1,0 +1,109 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Broken Function Level Authorization (BFLA) Test API",
+    "description": "Sandbox API for validating OWASP API5:2023 BFLA, Privilege Escalation, and HTTP Verb Tampering detection in SentinelAPI.",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8008",
+      "description": "Local Vulnerable BFLA Backend (Port 8008)"
+    },
+    {
+      "url": "http://localhost:8009",
+      "description": "Local Hardened BFLA Backend (Port 8009)"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer"
+      }
+    }
+  },
+  "paths": {
+    "/api/public/status": {
+      "get": {
+        "summary": "Check public service health",
+        "description": "Public baseline endpoint that does not require authorization.",
+        "responses": {
+          "200": { "description": "Service status" }
+        }
+      }
+    },
+    "/api/admin/system/metrics": {
+      "get": {
+        "summary": "Read admin system metrics",
+        "description": "Sensitive administrative diagnostic endpoint.",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": { "description": "Admin metrics" },
+          "403": { "description": "Forbidden - Admin role required" }
+        }
+      }
+    },
+    "/api/admin/audit-logs": {
+      "get": {
+        "summary": "Download organization audit logs",
+        "description": "Confidential security audit trail.",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": { "description": "Audit log records" },
+          "403": { "description": "Forbidden - Admin role required" }
+        }
+      }
+    },
+    "/api/users/{userId}": {
+      "get": {
+        "summary": "Read user account details",
+        "parameters": [
+          { "name": "userId", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "responses": {
+          "200": { "description": "User details" }
+        }
+      },
+      "delete": {
+        "summary": "Delete user account (Admin only)",
+        "description": "Destructive endpoint requiring administrative authorization.",
+        "parameters": [
+          { "name": "userId", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": { "description": "User deleted" },
+          "403": { "description": "Forbidden - Admin role required" }
+        }
+      }
+    },
+    "/api/users/{userId}/role": {
+      "put": {
+        "summary": "Update user privilege role (Admin only)",
+        "description": "Sensitive authorization boundary endpoint.",
+        "parameters": [
+          { "name": "userId", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "role": { "type": "string", "example": "admin" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Role modified" },
+          "403": { "description": "Forbidden - Super-admin required" }
+        }
+      }
+    }
+  }
+}

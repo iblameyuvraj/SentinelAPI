@@ -1,0 +1,86 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Security Misconfiguration Test API",
+    "description": "Sandbox API for validating OWASP API8:2023 Security Misconfiguration (HSTS, CSP, nosniff, Insecure Cookies, CORS, and Server Fingerprinting) in SentinelAPI.",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8010",
+      "description": "Local Vulnerable Security Misconfiguration Backend (Port 8010)"
+    },
+    {
+      "url": "http://localhost:8011",
+      "description": "Local Hardened Security Misconfiguration Backend (Port 8011)"
+    }
+  ],
+  "paths": {
+    "/api/public/status": {
+      "get": {
+        "summary": "Check public service health",
+        "description": "Standard service health check endpoint.",
+        "responses": {
+          "200": { "description": "Service health status" }
+        }
+      }
+    },
+    "/api/auth/login": {
+      "post": {
+        "summary": "User authentication and session generation",
+        "description": "Generates session cookies and authorization tokens.",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "username": { "type": "string", "example": "alice" },
+                  "password": { "type": "string", "example": "Secret123!" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Session established" }
+        }
+      },
+      "get": {
+        "summary": "Retrieve login form or session token",
+        "description": "Returns session cookie attributes.",
+        "responses": {
+          "200": { "description": "Session established" }
+        }
+      }
+    },
+    "/api/user/profile": {
+      "get": {
+        "summary": "Fetch authenticated user profile",
+        "description": "Sensitive profile data subjected to CORS origin evaluation.",
+        "responses": {
+          "200": { "description": "User profile data" }
+        }
+      }
+    },
+    "/api/debug/error": {
+      "get": {
+        "summary": "Diagnostic test error endpoint",
+        "description": "Triggers internal error condition to evaluate error handling disclosure.",
+        "responses": {
+          "500": { "description": "Internal server error" }
+        }
+      }
+    },
+    "/api/config": {
+      "get": {
+        "summary": "Fetch public client application configuration",
+        "description": "Evaluates response headers for technology stack fingerprinting.",
+        "responses": {
+          "200": { "description": "Configuration object" }
+        }
+      }
+    }
+  }
+}

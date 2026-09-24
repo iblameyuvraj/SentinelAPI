@@ -560,13 +560,13 @@ def prompt_ai_rate_limit_overview(
     ) as progress:
         task = progress.add_task(f"Connecting to {ai_cfg['model']}...", total=None)
 
-        def update_spinner(chunk: str):
-            progress.update(task, description="[bold green]Generating Resource Security Overview...[/bold green]")
+        def update_spinner(count: int):
+            progress.update(task, description=f"[bold green]Generating Resource Security Overview ({count} tokens)...[/bold green]")
 
-        response_text, error_msg = request_ai_overview(prompt_text, stream_callback=update_spinner)
+        success, response_text = request_ai_overview(prompt_text, progress_callback=update_spinner)
 
-    if error_msg or not response_text:
-        console.print(f"[bold red]AI Generation Failed:[/bold red] {error_msg}")
+    if not success or not response_text:
+        console.print(f"[bold red]AI Generation Failed:[/bold red] {response_text}")
         return
 
     console.print()
