@@ -162,7 +162,7 @@ def handle_openapi_flow() -> Optional[ParsedSpecification]:
 
 def render_vulnerability_menu(spec: ParsedSpecification):
     """Clears terminal after confirmation, displays specification header, and lists testable vulnerabilities."""
-    from sentinelapi.bola_idor.ui import run_bola_idor_flow
+    from sentinelapi.features.bola_idor.ui import run_bola_idor_flow
 
     file_name = Path(spec.source).name if spec.source else "OpenAPI Specification"
 
@@ -219,8 +219,13 @@ def render_vulnerability_menu(spec: ParsedSpecification):
             continue
 
         if "3. Excessive Data Exposure" in chosen_test:
-            from sentinelapi.Excessive_Data_Exposure import run_excessive_data_flow
+            from sentinelapi.features.Excessive_Data_Exposure import run_excessive_data_flow
             run_excessive_data_flow(spec)
+            continue
+
+        if "4. Authentication Misconfiguration" in chosen_test:
+            from sentinelapi.features.Authentication_Misconfiguration import run_auth_misconfig_flow
+            run_auth_misconfig_flow(spec)
             continue
 
         # UI Preview Card for remaining modules

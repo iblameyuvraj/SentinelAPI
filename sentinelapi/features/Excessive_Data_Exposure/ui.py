@@ -14,9 +14,9 @@ from prompt_toolkit.styles import Style
 
 from sentinelapi.cli.theme import console
 from sentinelapi.api_source.spec_parser import ParsedSpecification, APIEndpointInfo
-from sentinelapi.Excessive_Data_Exposure.detector import analyze_endpoint_exposure
+from sentinelapi.features.Excessive_Data_Exposure.detector import analyze_endpoint_exposure
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 MARKDOWN_DIR = PROJECT_ROOT / "markdown"
 
 

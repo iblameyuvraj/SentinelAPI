@@ -14,7 +14,7 @@ from prompt_toolkit.styles import Style
 from sentinelapi.cli.theme import console
 from sentinelapi.api_source.spec_parser import ParsedSpecification, APIEndpointInfo
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 MARKDOWN_DIR = PROJECT_ROOT / "markdown"
 
 
