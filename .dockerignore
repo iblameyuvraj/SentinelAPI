@@ -1,0 +1,24 @@
+.git
+.gitignore
+.venv
+venv/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.coverage
+htmlcov/
+*.egg-info/
+dist/
+build/
+.DS_Store
+
+# Don't bake secrets into docker image
+.env
+.env.local
+
+# Reports directory (mounted dynamically at runtime)
+markdown/*.pdf
+markdown/*.md
+markdown/*.json

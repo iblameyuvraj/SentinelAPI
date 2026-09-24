@@ -1,106 +1,450 @@
 {
-  "openapi": "3.0.0",
+  "openapi": "3.0.3",
   "info": {
-    "title": "SandboxAPI",
-    "description": "Multi-tenant e-commerce backend sandbox with object authorization boundaries",
-    "version": "1.0.0"
+    "title": "Fluffwalks Web API — Complete Security Assessment Suite",
+    "description": "Unified OpenAPI specification for Fluffwalks (fluffwalks.in). Consolidates all security audit endpoints spanning BOLA/IDOR, Excessive Data Exposure, Authentication Misconfiguration, Rate Limiting, BFLA/Privilege Escalation, Security Misconfiguration (Headers & Cookies), and Shadow/Zombie API Discovery across Customer, Boarder, Payment, and Admin domains.",
+    "version": "1.0.0",
+    "contact": {
+      "name": "Yuvraj Soni",
+      "email": "yuvrajjsoni17@gmail.com"
+    }
   },
   "servers": [
     {
-      "url": "http://localhost:8000"
+      "url": "https://www.fluffwalks.in",
+      "description": "Fluffwalks Live Production Server"
+    },
+    {
+      "url": "http://localhost:3000",
+      "description": "Fluffwalks Local Next.js Development Server"
     }
   ],
   "components": {
     "securitySchemes": {
-      "BearerAuth": {
+      "SupabaseBearerAuth": {
         "type": "http",
         "scheme": "bearer",
-        "bearerFormat": "JWT"
+        "bearerFormat": "JWT",
+        "description": "Supabase Auth JWT Token (e.g. Bearer eyJhbGciOi...)"
+      },
+      "cookieAuth": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "sb-lbvrdowxiffmoacfuoiy-auth-token",
+        "description": "Supabase session cookie (split-cookie format)"
+      }
+    },
+    "schemas": {
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "example": "Unauthorized"
+          }
+        }
+      },
+      "ForbiddenResponse": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "example": "Forbidden — you are not assigned to this stay."
+          }
+        }
+      },
+      "UserProfile": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "550e8400-e29b-41d4-a716-446655440000"
+          },
+          "first_name": {
+            "type": "string",
+            "example": "Yuvraj"
+          },
+          "email": {
+            "type": "string",
+            "example": "user@fluffwalks.in"
+          },
+          "phone": {
+            "type": "string",
+            "example": "9876543210"
+          }
+        }
+      },
+      "Ride": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "7c9e6679-7425-40de-944b-e07fc1f90ae7"
+          },
+          "user_id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "550e8400-e29b-41d4-a716-446655440000"
+          },
+          "status": {
+            "type": "string",
+            "example": "confirmed"
+          },
+          "ride_date": {
+            "type": "string",
+            "format": "date",
+            "example": "2026-09-30"
+          }
+        }
+      },
+      "BoardingStay": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "a1b2c3d4-e5f6-47a8-b9c0-d1e2f3a4b5c6"
+          },
+          "user_id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "550e8400-e29b-41d4-a716-446655440000"
+          },
+          "boarder_id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "d4c3b2a1-f6e5-4a87-0c9b-6c5b4a3f2e1d"
+          },
+          "status": {
+            "type": "string",
+            "example": "in_progress"
+          }
+        }
       }
     }
   },
   "security": [
     {
-      "BearerAuth": []
+      "SupabaseBearerAuth": []
     }
   ],
   "paths": {
-    "/users/{userId}": {
+    "/api/user/profile": {
       "get": {
-        "summary": "Retrieve user profile summary",
+        "summary": "Customer Profile & Addresses (Excessive Data Exposure Vector)",
+        "description": "Audits user profile, contact info, pets array, and address records for PII leaks, unnecessary field exposure, and sensitive data leakage.",
+        "tags": [
+          "Excessive Data Exposure",
+          "User"
+        ],
+        "responses": {
+          "200": {
+            "description": "Profile data with potential PII leakage"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/user/rides": {
+      "get": {
+        "summary": "Customer Dog Walking Bookings (Excessive Data Exposure Vector)",
+        "description": "Audits booked ride records, live GPS locations, and payment amounts for data leaks.",
+        "tags": [
+          "Excessive Data Exposure",
+          "User"
+        ],
+        "responses": {
+          "200": {
+            "description": "Rides list with potential data leakage"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/user/boardings": {
+      "get": {
+        "summary": "Customer Home Boarding Bookings (Excessive Data Exposure Vector)",
+        "description": "Audits home boarding stay records, boarder PII assignments, and location data for excessive exposure.",
+        "tags": [
+          "Excessive Data Exposure",
+          "User"
+        ],
+        "responses": {
+          "200": {
+            "description": "Boardings list with potential data leakage"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/user/{userId}/profile": {
+      "get": {
+        "summary": "User Profile (BOLA Test Vector)",
+        "description": "Verifies that an authenticated customer cannot retrieve the profile, contact information, and address of a different tenant by altering the userId.",
+        "tags": [
+          "BOLA / IDOR",
+          "User"
+        ],
         "parameters": [
           {
             "name": "userId",
             "in": "path",
             "required": true,
+            "description": "Target Supabase user UUID",
             "schema": {
-              "type": "integer"
+              "type": "string",
+              "format": "uuid",
+              "example": "550e8400-e29b-41d4-a716-446655440000"
             }
           }
         ],
         "responses": {
           "200": {
-            "description": "User profile"
+            "description": "Profile data retrieved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserProfile"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden - Object authorization denied"
           }
         }
       }
     },
-    "/users/{userId}/orders": {
+    "/api/user/{userId}/rides": {
       "get": {
-        "summary": "Retrieve all orders belonging to a specific user",
+        "summary": "Customer Ride History (BOLA Test Vector)",
+        "description": "Audits whether User B can view the private dog walking / ride bookings of User A by requesting User A's userId.",
+        "tags": [
+          "BOLA / IDOR",
+          "User"
+        ],
         "parameters": [
           {
             "name": "userId",
             "in": "path",
             "required": true,
+            "description": "Target customer UUID",
             "schema": {
-              "type": "integer"
+              "type": "string",
+              "format": "uuid",
+              "example": "550e8400-e29b-41d4-a716-446655440000"
             }
           }
         ],
         "responses": {
           "200": {
-            "description": "List of orders"
+            "description": "List of user rides",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Ride"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
           }
         }
       }
     },
-    "/orders/{orderId}": {
+    "/api/user/{userId}/boardings": {
       "get": {
-        "summary": "Fetch order details by order ID",
+        "summary": "Customer Boarding History (BOLA Test Vector)",
+        "description": "Audits whether User B can view the pet boarding bookings and home stay locations of User A.",
+        "tags": [
+          "BOLA / IDOR",
+          "User"
+        ],
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "description": "Target customer UUID",
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "example": "550e8400-e29b-41d4-a716-446655440000"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of user boarding stays",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/BoardingStay"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        }
+      }
+    },
+    "/api/border/bookings/{bookingId}/status": {
+      "post": {
+        "summary": "Boarder Stay Status Update (BOLA / IDOR Verification)",
+        "description": "Audits whether a rogue boarder or arbitrary authenticated user can transition a stay status (e.g. to 'completed') for a booking they are not assigned to.",
+        "tags": [
+          "BOLA / IDOR",
+          "Boarder"
+        ],
+        "parameters": [
+          {
+            "name": "bookingId",
+            "in": "path",
+            "required": true,
+            "description": "Target booked_boardings record UUID",
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "example": "a1b2c3d4-e5f6-47a8-b9c0-d1e2f3a4b5c6"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Status updated successfully"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden — user is not the assigned boarder"
+          }
+        }
+      }
+    },
+    "/api/payments/orders/{orderId}/cancel": {
+      "post": {
+        "summary": "Razorpay Order Cancellation (IDOR Prevention Check)",
+        "description": "Tests if a user can cancel another customer's pending order or delete their pending booking records by guessing razorpay_order_id.",
+        "tags": [
+          "BOLA / IDOR",
+          "Payment"
+        ],
         "parameters": [
           {
             "name": "orderId",
             "in": "path",
             "required": true,
+            "description": "Razorpay order identifier",
             "schema": {
-              "type": "integer"
+              "type": "string",
+              "example": "order_RL81204812"
             }
           }
         ],
         "responses": {
           "200": {
-            "description": "Order details"
+            "description": "Order cancelled"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden — payment record does not belong to user"
           }
         }
       }
     },
-    "/api/users/{userId}/profile": {
-      "get": {
-        "summary": "Full user profile details",
+    "/api/admin/rides/{rideId}/complete": {
+      "post": {
+        "summary": "Admin Ride Completion & Referral Award (BFLA / Privilege Escalation Vector)",
+        "description": "Tests if a regular authenticated user can invoke the ride completion endpoint to trigger commission & status changes on an arbitrary ride ID.",
+        "tags": [
+          "BFLA / Privilege Escalation",
+          "Admin"
+        ],
         "parameters": [
           {
-            "name": "userId",
+            "name": "rideId",
             "in": "path",
             "required": true,
+            "description": "Booked ride UUID",
             "schema": {
-              "type": "integer"
+              "type": "string",
+              "format": "uuid",
+              "example": "7c9e6679-7425-40de-944b-e07fc1f90ae7"
             }
           }
         ],
         "responses": {
           "200": {
-            "description": "User profile details"
+            "description": "Ride completed"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden — admin privileges required"
+          }
+        }
+      }
+    },
+    "/api/admin/partners/{partnerId}/verify": {
+      "post": {
+        "summary": "Admin Partner Verification (BFLA / Admin Bypass Vector)",
+        "description": "Audits whether a non-admin user can approve or reject boarding partners by supplying arbitrary partner IDs.",
+        "tags": [
+          "BFLA / Privilege Escalation",
+          "Admin"
+        ],
+        "parameters": [
+          {
+            "name": "partnerId",
+            "in": "path",
+            "required": true,
+            "description": "Boarder partner UUID",
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "example": "d4c3b2a1-f6e5-4a87-0c9b-6c5b4a3f2e1d"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Partner status updated"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
           }
         }
       }

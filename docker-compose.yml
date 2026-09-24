@@ -1,0 +1,24 @@
+services:
+  sentinel:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: sentinelapi
+    image: sentinelapi:latest
+    stdin_open: true
+    tty: true
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      # Sync output PDFs and Markdown audit reports to host machine
+      - ./markdown:/app/markdown
+      # Mount custom OpenAPI specs from host
+      - ./fluffwalks-test-case:/app/fluffwalks-test-case:ro
+      - ./sandbox_openapi.json:/app/sandbox_openapi.json:ro
+    environment:
+      - PYTHONUNBUFFERED=1
+      - TERM=xterm-256color
+    extra_hosts:
+      # Allows scanning target APIs running on host localhost
+      - "host.docker.internal:host-gateway"
