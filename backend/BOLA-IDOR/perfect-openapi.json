@@ -1,0 +1,242 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Secured BOLA-Protected Target API",
+    "description": "Properly secured multi-tenant e-commerce backend enforcing OWASP API1:2023 Object-Level Access Control. Token caller identity is strictly validated against the requested resource ownership, returning 403 Forbidden on any cross-tenant access attempt.",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8001",
+      "description": "Secured Local Backend Server"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "Enter valid user Bearer token (e.g., 'Bearer token-101' for Yuvraj or 'Bearer token-102' for Rahul)"
+      }
+    },
+    "schemas": {
+      "UserProfile": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer", "example": 101 },
+          "name": { "type": "string", "example": "Yuvraj" },
+          "email": { "type": "string", "example": "yuvraj@example.com" }
+        }
+      },
+      "Order": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer", "example": 501 },
+          "userId": { "type": "integer", "example": 101 },
+          "item": { "type": "string", "example": "MacBook Pro" },
+          "amount": { "type": "number", "example": 2400 }
+        }
+      },
+      "UserOrdersResponse": {
+        "type": "object",
+        "properties": {
+          "userId": { "type": "integer", "example": 101 },
+          "count": { "type": "integer", "example": 2 },
+          "orders": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/Order" }
+          }
+        }
+      },
+      "ForbiddenBolaError": {
+        "type": "object",
+        "properties": {
+          "error": { "type": "string", "example": "Forbidden" },
+          "code": { "type": "string", "example": "BOLA_PREVENTED" },
+          "message": { "type": "string", "example": "Access denied: Object-level authorization failed. You do not own this resource." }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "error": { "type": "string", "example": "Unauthorized" },
+          "message": { "type": "string", "example": "Missing or invalid Bearer authorization header" }
+        }
+      }
+    }
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "summary": "Health check & security control information",
+        "description": "Returns status and security configuration of the secured target server.",
+        "responses": {
+          "200": {
+            "description": "Service online status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": { "type": "string", "example": "online" },
+                    "target": { "type": "string", "example": "Secured BOLA-Protected Backend" },
+                    "auth_scheme": { "type": "string", "example": "Bearer JWT / Token" },
+                    "protection": { "type": "string", "example": "Strict Object-Level Authorization enforced" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/users/{userId}": {
+      "get": {
+        "summary": "Retrieve user profile by ID (BOLA-Protected)",
+        "description": "Fetches profile info. SECURED: Validates that caller identity matches requested userId. Rejects cross-tenant attempts with 403 Forbidden.",
+        "security": [
+          { "BearerAuth": [] }
+        ],
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "description": "Target user ID (must match authenticated caller)",
+            "schema": {
+              "type": "integer",
+              "example": 101
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "User profile retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/UserProfile" }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized - Missing or invalid Bearer token",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden - BOLA prevented (Caller identity does not match requested userId)",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ForbiddenBolaError" }
+              }
+            }
+          },
+          "404": {
+            "description": "User not found"
+          }
+        }
+      }
+    },
+    "/users/{userId}/orders": {
+      "get": {
+        "summary": "Retrieve all orders belonging to a user (BOLA-Protected)",
+        "description": "Fetches order history. SECURED: Strict ownership check ensures callers can only inspect orders belonging to their own userId.",
+        "security": [
+          { "BearerAuth": [] }
+        ],
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "description": "Target user ID (must match authenticated caller)",
+            "schema": {
+              "type": "integer",
+              "example": 101
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "User orders retrieved",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/UserOrdersResponse" }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized - Missing or invalid Bearer token",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden - BOLA prevented (Caller does not own requested userId)",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ForbiddenBolaError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/orders/{orderId}": {
+      "get": {
+        "summary": "Fetch order details by order ID (BOLA-Protected)",
+        "description": "Fetches order details. SECURED: Server checks if the referenced order's owner matches the caller before returning data.",
+        "security": [
+          { "BearerAuth": [] }
+        ],
+        "parameters": [
+          {
+            "name": "orderId",
+            "in": "path",
+            "required": true,
+            "description": "Target order identifier",
+            "schema": {
+              "type": "integer",
+              "example": 501
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Order details retrieved",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Order" }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized - Missing or invalid Bearer token",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden - BOLA prevented (Order does not belong to authenticated caller)",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ForbiddenBolaError" }
+              }
+            }
+          },
+          "404": {
+            "description": "Order not found"
+          }
+        }
+      }
+    }
+  }
+}

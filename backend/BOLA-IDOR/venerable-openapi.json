@@ -1,0 +1,209 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Vulnerable BOLA / IDOR Target API",
+    "description": "Intentionally vulnerable multi-tenant e-commerce backend demonstrating OWASP API1:2023 Broken Object Level Authorization (BOLA / IDOR). Authentication is checked via Bearer tokens, but endpoints fail to verify if the requester owns the requested object ID.",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8000",
+      "description": "Vulnerable Local Backend Server"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "Enter valid Bearer token (e.g., 'Bearer token-101' or 'Bearer token-102')"
+      }
+    },
+    "schemas": {
+      "UserProfile": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer", "example": 101 },
+          "name": { "type": "string", "example": "Yuvraj" },
+          "email": { "type": "string", "example": "yuvraj@example.com" }
+        }
+      },
+      "Order": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer", "example": 501 },
+          "userId": { "type": "integer", "example": 101 },
+          "item": { "type": "string", "example": "MacBook Pro" },
+          "amount": { "type": "number", "example": 2400 }
+        }
+      },
+      "UserOrdersResponse": {
+        "type": "object",
+        "properties": {
+          "userId": { "type": "integer", "example": 101 },
+          "count": { "type": "integer", "example": 2 },
+          "orders": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/Order" }
+          }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "error": { "type": "string", "example": "Unauthorized" },
+          "message": { "type": "string", "example": "Missing or invalid Bearer authorization header" }
+        }
+      }
+    }
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "summary": "Health check & service target information",
+        "description": "Returns status of the vulnerable target server.",
+        "responses": {
+          "200": {
+            "description": "Service online status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": { "type": "string", "example": "online" },
+                    "target": { "type": "string", "example": "Vulnerable BOLA Backend" },
+                    "auth_required": { "type": "boolean", "example": true }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/users/{userId}": {
+      "get": {
+        "summary": "Retrieve user profile by ID",
+        "description": "Fetches profile info for a user. Vulnerable: Any authenticated user can view another user's profile.",
+        "security": [
+          { "BearerAuth": [] }
+        ],
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "description": "User identifier to look up",
+            "schema": {
+              "type": "integer",
+              "example": 101
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "User profile retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/UserProfile" }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized - Missing Bearer token",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          },
+          "404": {
+            "description": "User not found"
+          }
+        }
+      }
+    },
+    "/users/{userId}/orders": {
+      "get": {
+        "summary": "Retrieve all orders belonging to a user (BOLA / IDOR Flaw)",
+        "description": "Fetches order history for a given userId. VULNERABILITY (OWASP API1:2023): Backend does NOT verify if the authenticated token holder owns the requested userId, allowing cross-tenant order leaks.",
+        "security": [
+          { "BearerAuth": [] }
+        ],
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "description": "Target user ID whose orders to inspect",
+            "schema": {
+              "type": "integer",
+              "example": 101
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "User orders retrieved",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/UserOrdersResponse" }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized - Missing Bearer token",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/orders/{orderId}": {
+      "get": {
+        "summary": "Fetch order details by order ID (IDOR Flaw)",
+        "description": "Fetches a specific order. VULNERABILITY: Missing object authorization allows any authenticated user to view arbitrary orders by enumerating orderId.",
+        "security": [
+          { "BearerAuth": [] }
+        ],
+        "parameters": [
+          {
+            "name": "orderId",
+            "in": "path",
+            "required": true,
+            "description": "Unique order identifier",
+            "schema": {
+              "type": "integer",
+              "example": 501
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Order details retrieved",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Order" }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized - Missing Bearer token",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          },
+          "404": {
+            "description": "Order not found"
+          }
+        }
+      }
+    }
+  }
+}

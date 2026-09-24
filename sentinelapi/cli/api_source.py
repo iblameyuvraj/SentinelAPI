@@ -155,46 +155,96 @@ def handle_openapi_flow() -> Optional[ParsedSpecification]:
 
         confirm = questionary.confirm("Continue to API analysis & security testing?", default=True, style=CUSTOM_STYLE).ask()
         if confirm:
-            render_ai_analysis_card(spec)
+            render_vulnerability_menu(spec)
             return spec
         return None
 
 
-def render_ai_analysis_card(spec: ParsedSpecification):
-    """Renders the AI structural discovery analysis and security recommendations."""
-    console.print("\n[bold cyan]AI analyzing API structure...[/bold cyan]")
-    time.sleep(0.4)
+def render_vulnerability_menu(spec: ParsedSpecification):
+    """Clears terminal after confirmation, displays specification header, and lists testable vulnerabilities."""
+    from sentinelapi.bola_idor.ui import run_bola_idor_flow
 
-    param_eps = spec.parameterized_endpoints
-    user_scoped = [ep for ep in spec.endpoints if "user" in ep.path.lower() or "account" in ep.path.lower()]
-    
-    analysis_lines = [
-        f" [bold green]✓[/bold green] [bold white]{len(spec.endpoints)}[/bold white] endpoints discovered",
-        f" [bold green]✓[/bold green] [bold white]{spec.auth_scheme}[/bold white] authentication detected",
-        f" [bold green]✓[/bold green] [bold white]{len(param_eps)}[/bold white] object identifier routes detected",
-        f" [bold green]✓[/bold green] [bold white]{len(user_scoped)}[/bold white] user-scoped resources detected\n",
-        "[bold cyan]Potential authorization boundaries:[/bold cyan]",
-    ]
+    file_name = Path(spec.source).name if spec.source else "OpenAPI Specification"
 
-    for ep in param_eps[:5]:
-        analysis_lines.append(f"   • [bright_blue]{ep.identifier}[/bright_blue]")
+    while True:
+        console.clear()
 
-    if len(param_eps) > 5:
-        analysis_lines.append(f"   [dim]... and {len(param_eps) - 5} more routes[/dim]")
+        # Persistent Specification Details Header
+        summary_table = Table(box=None, show_header=False, padding=(0, 2))
+        summary_table.add_column("Key", style="bold cyan")
+        summary_table.add_column("Val", style="bold white")
 
-    analysis_lines.append("\n[bold yellow]Recommended security tests:[/bold yellow]")
-    analysis_lines.append("   • [bold white]BOLA / IDOR[/bold white] [dim](Broken Object Level Authorization)[/dim]")
-    analysis_lines.append("   • [bold white]Excessive Data Exposure[/bold white] [dim](PII / Internal Fields Leakage)[/dim]")
+        summary_table.add_row("File Name:", file_name)
+        summary_table.add_row("API Title:", spec.title)
+        summary_table.add_row("Version:", spec.version)
+        summary_table.add_row("Standard:", spec.spec_type)
+        summary_table.add_row("Base URL:", spec.base_url)
+        summary_table.add_row("Auth Scheme:", spec.auth_scheme)
+        summary_table.add_row("Endpoints:", f"{len(spec.endpoints)} discovered")
+        summary_table.add_row("Object IDs:", f"{len(spec.parameterized_endpoints)} parameterized routes")
 
-    console.print()
-    console.print(
-        Panel(
-            "\n".join(analysis_lines),
-            title="[bold magenta]⚡ AI ANALYSIS[/bold magenta]",
-            border_style="magenta",
-            padding=(1, 2),
+        console.print(
+            Panel(
+                summary_table,
+                title="[bold cyan]SPECIFICATION LOADED[/bold cyan]",
+                border_style="cyan",
+                padding=(1, 2),
+            )
         )
-    )
+
+        # Vulnerability selection menu
+        vuln_choices = [
+            "1. Scan all vulnerabilities",
+            "2. BOLA / IDOR (Broken Object Level Authorization)",
+            "3. Excessive Data Exposure",
+            "4. Authentication Misconfiguration",
+            "5. Rate Limiting",
+            "6. Back to API Source",
+        ]
+
+        try:
+            chosen_test = questionary.select(
+                "Select Security Test to Execute:",
+                choices=vuln_choices,
+                style=CUSTOM_STYLE,
+            ).ask()
+        except (KeyboardInterrupt, EOFError):
+            return
+
+        if not chosen_test or "6. Back" in chosen_test:
+            return
+
+        if "2. BOLA / IDOR" in chosen_test:
+            run_bola_idor_flow(spec)
+            continue
+
+        # UI Preview Card for remaining modules
+        console.print()
+        preview_table = Table(box=None, show_header=False, padding=(0, 2))
+        preview_table.add_column("Key", style="bold cyan")
+        preview_table.add_column("Val", style="bold white")
+
+        preview_table.add_row("Selected Test:", chosen_test)
+        preview_table.add_row("Target API:", f"{spec.title} ({spec.base_url})")
+        preview_table.add_row(
+            "Target Endpoints:",
+            f"{len(spec.parameterized_endpoints)} routes" if "BOLA" in chosen_test else f"{len(spec.endpoints)} routes",
+        )
+        preview_table.add_row("Status:", "[bold yellow]Ready for AI Test Generation & Execution[/bold yellow]")
+
+        console.print(
+            Panel(
+                preview_table,
+                title="[bold yellow]AI TEST EXECUTION PREVIEW[/bold yellow]",
+                border_style="yellow",
+                padding=(1, 2),
+            )
+        )
+        console.print("[dim]UI mode active. Ready for scanning logic integration.[/dim]\n")
+        try:
+            questionary.press_any_key_to_continue("Press any key to continue...").ask()
+        except (KeyboardInterrupt, EOFError):
+            pass
 
 
 def handle_documentation_flow() -> Optional[ParsedSpecification]:
