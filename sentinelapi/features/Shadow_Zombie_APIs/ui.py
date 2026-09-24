@@ -199,6 +199,7 @@ def run_live_inventory_scan(spec: ParsedSpecification, config: Dict[str, Any]):
                 progress.advance(task)
 
     display_shadow_zombie_results(spec, findings, config)
+    return findings
 
 
 def display_shadow_zombie_results(

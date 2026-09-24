@@ -495,6 +495,8 @@ def run_assessment(spec: ParsedSpecification, endpoints: List[APIEndpointInfo], 
     except (KeyboardInterrupt, EOFError):
         pass
 
+    return results
+
 
 def save_scan_results_markdown(
     spec: ParsedSpecification,

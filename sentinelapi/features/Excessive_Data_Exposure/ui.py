@@ -422,6 +422,8 @@ def render_exposure_results_and_remediation(
     except (KeyboardInterrupt, EOFError):
         pass
 
+    return results
+
 
 def save_exposure_scan_results_markdown(
     spec: ParsedSpecification,

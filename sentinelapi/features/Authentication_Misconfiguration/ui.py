@@ -388,6 +388,8 @@ def display_auth_results(
     except (KeyboardInterrupt, EOFError):
         pass
 
+    return findings
+
 
 def display_code_remediation():
     """Renders production code fixes for Express.js and FastAPI."""

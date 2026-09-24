@@ -1,17 +1,17 @@
 """SentinelAPI Master Scan — Unified Full-Suite Security Assessment.
 
 Orchestrates all 7 vulnerability modules in a single automated pipeline:
-  1. BOLA / IDOR
+  1. BOLA / IDOR (Broken Object Level Authorization)
   2. Excessive Data Exposure
   3. Authentication Misconfiguration
-  4. Rate Limiting
+  4. Rate Limiting & Resource Exhaustion
   5. BFLA & Privilege Escalation
   6. Security Misconfiguration (Headers & Cookies)
   7. Shadow & Zombie API Discovery
 
 Collects ALL configuration once upfront, then runs every scanner back-to-back
-with zero user interaction. Produces a consolidated AI-powered security
-overview at the very end.
+with zero user interaction. Captures detailed live telemetry from every module
+and produces a consolidated AI-powered security overview with complete remediation.
 """
 import json
 import time
@@ -59,7 +59,7 @@ def _auto_answer_prompts():
     orig_input = builtins.input
 
     def fake_confirm(*args, **kwargs):
-        console.print("[dim]  ↳ Auto-skipped (master scan handles AI at the end)[/dim]")
+        console.print("[dim]  ↳ Sub-module AI skipped (master scan handles AI at the end)[/dim]")
         return _NoOpQuestion(False)
 
     def fake_press(*args, **kwargs):
@@ -78,6 +78,7 @@ def _auto_answer_prompts():
         questionary.confirm = orig_confirm
         questionary.press_any_key_to_continue = orig_press
         builtins.input = orig_input
+
 
 CUSTOM_STYLE = Style(
     [
@@ -150,14 +151,7 @@ MODULE_REGISTRY = [
 
 
 def run_master_scan(spec: ParsedSpecification):
-    """Orchestrates a full-suite security scan across all 7 OWASP modules.
-    
-    Flow:
-      1. Ask ALL configuration questions upfront (zero interaction after this)
-      2. Run each module's live scan function directly one by one
-      3. Show consolidated summary dashboard
-      4. Generate unified AI security overview
-    """
+    """Orchestrates a full-suite security scan across all 7 OWASP modules."""
     console.clear()
 
     # ── Splash Banner ──
@@ -248,15 +242,19 @@ def run_master_scan(spec: ParsedSpecification):
             )
 
             try:
-                execute_module(mod["id"], spec, config)
-                module_outcomes.append({"module": mod, "status": "completed"})
+                raw_findings = execute_module(mod["id"], spec, config)
+                module_outcomes.append({
+                    "module": mod,
+                    "status": "completed",
+                    "findings": raw_findings or [],
+                })
                 console.print(f"[bold green]  ✓ {mod['name']} — COMPLETED[/bold green]")
             except KeyboardInterrupt:
                 console.print(f"\n[bold yellow]  ⚠ {mod['name']} — INTERRUPTED (skipping)[/bold yellow]")
-                module_outcomes.append({"module": mod, "status": "skipped"})
+                module_outcomes.append({"module": mod, "status": "skipped", "findings": []})
             except Exception as e:
                 console.print(f"\n[bold red]  ✖ {mod['name']} — ERROR: {str(e)[:100]}[/bold red]")
-                module_outcomes.append({"module": mod, "status": "error"})
+                module_outcomes.append({"module": mod, "status": "error", "findings": [], "error": str(e)})
 
     # ═══════════════════════════════════════════════════════
     # STEP 3: Consolidated Summary Dashboard
@@ -405,11 +403,11 @@ def configure_master_scan(spec: ParsedSpecification) -> Optional[Dict[str, Any]]
         return None
 
 
-def execute_module(module_id: str, spec: ParsedSpecification, config: Dict[str, Any]):
-    """Dispatches to each module's DIRECT live scan function (bypassing interactive menus)."""
+def execute_module(module_id: str, spec: ParsedSpecification, config: Dict[str, Any]) -> Any:
+    """Dispatches to each module's DIRECT live scan function and returns raw findings."""
 
     if module_id == "bola_idor":
-        _run_bola_direct(spec, config)
+        return _run_bola_direct(spec, config)
 
     elif module_id == "excessive_data":
         from sentinelapi.features.Excessive_Data_Exposure.ui import run_live_exposure_scan
@@ -422,7 +420,7 @@ def execute_module(module_id: str, spec: ParsedSpecification, config: Dict[str, 
         if not config["bearer_token"] and config.get("cookie_string"):
             mod_config["bearer_token"] = config["cookie_string"]
             mod_config["auth_header"] = "Cookie"
-        run_live_exposure_scan(spec, mod_config)
+        return run_live_exposure_scan(spec, mod_config)
 
     elif module_id == "auth_misconfig":
         from sentinelapi.features.Authentication_Misconfiguration.ui import run_live_auth_scan
@@ -431,7 +429,7 @@ def execute_module(module_id: str, spec: ParsedSpecification, config: Dict[str, 
             "base_token": config.get("base_token", ""),
             "vector_choice": "1. All Test Vectors (Missing Auth, alg:none, Tampered Sig, Expired Token, Malformed)",
         }
-        run_live_auth_scan(spec, mod_config)
+        return run_live_auth_scan(spec, mod_config)
 
     elif module_id == "rate_limiting":
         from sentinelapi.features.Rate_Limiting.ui import run_live_rate_limit_scan
@@ -443,7 +441,7 @@ def execute_module(module_id: str, spec: ParsedSpecification, config: Dict[str, 
             "burst_count": config.get("burst_count", 20),
             "headers": headers,
         }
-        run_live_rate_limit_scan(spec, mod_config)
+        return run_live_rate_limit_scan(spec, mod_config)
 
     elif module_id == "bfla":
         from sentinelapi.features.BFLA.ui import run_live_bfla_scan
@@ -451,7 +449,7 @@ def execute_module(module_id: str, spec: ParsedSpecification, config: Dict[str, 
             "base_url": config["base_url"],
             "user_token": config.get("bearer_token") or "Bearer user_token_101",
         }
-        run_live_bfla_scan(spec, mod_config)
+        return run_live_bfla_scan(spec, mod_config)
 
     elif module_id == "sec_misconfig":
         from sentinelapi.features.Security_Misconfiguration.ui import run_full_sec_misconfig_audit
@@ -459,17 +457,19 @@ def execute_module(module_id: str, spec: ParsedSpecification, config: Dict[str, 
             "base_url": config["base_url"],
             "auth_header": config.get("bearer_token") or "",
         }
-        run_full_sec_misconfig_audit(spec, mod_config)
+        return run_full_sec_misconfig_audit(spec, mod_config)
 
     elif module_id == "shadow_zombie":
         from sentinelapi.features.Shadow_Zombie_APIs.ui import run_live_inventory_scan
         mod_config = {
             "base_url": config["base_url"],
         }
-        run_live_inventory_scan(spec, mod_config)
+        return run_live_inventory_scan(spec, mod_config)
+
+    return []
 
 
-def _run_bola_direct(spec: ParsedSpecification, config: Dict[str, Any]):
+def _run_bola_direct(spec: ParsedSpecification, config: Dict[str, Any]) -> Any:
     """Runs BOLA/IDOR scan directly without the interactive menu loop."""
     from sentinelapi.features.bola_idor.ui import (
         infer_dynamic_bola_context,
@@ -477,20 +477,41 @@ def _run_bola_direct(spec: ParsedSpecification, config: Dict[str, Any]):
         run_assessment,
     )
 
-    # Build BOLA context from spec (auto-inferred, no user interaction)
     bola_config = infer_dynamic_bola_context(spec)
 
-    # Override with the master config's bearer token if provided
     if config.get("bearer_token"):
         bola_config["victim_token"] = config["bearer_token"]
-        # Generate a distinct attacker token (modified version)
         bola_config["attacker_token"] = "Bearer token-00000000-0000-0000-0000-000000000002"
 
     param_endpoints = spec.parameterized_endpoints
     is_live = check_target_online(spec.base_url)
 
-    # Call run_assessment directly (bypasses while True menu)
-    run_assessment(spec, param_endpoints, bola_config, is_live)
+    return run_assessment(spec, param_endpoints, bola_config, is_live)
+
+
+def _format_module_findings_for_summary(mo: Dict[str, Any]) -> str:
+    """Extracts a human-readable finding summary for a module."""
+    mod = mo["module"]
+    findings = mo.get("findings", [])
+    status = mo.get("status")
+
+    if status != "completed":
+        return f"[yellow]{status.upper()}[/yellow]"
+
+    if not findings:
+        return "[green]0 Vulnerabilities Detected (Clean)[/green]"
+
+    vuln_count = 0
+    if mod["id"] == "bola_idor":
+        vuln_count = sum(1 for f in findings if isinstance(f, dict) and f.get("vulnerable"))
+    elif mod["id"] == "excessive_data":
+        vuln_count = sum(1 for f in findings if isinstance(f, dict) and f.get("analysis", {}).get("is_vulnerable"))
+    else:
+        vuln_count = sum(1 for f in findings if getattr(f, "is_vulnerable", False) or (isinstance(f, dict) and f.get("is_vulnerable")))
+
+    if vuln_count > 0:
+        return f"[bold red]{vuln_count} Vulnerabilities Confirmed[/bold red]"
+    return "[bold green]✓ 0 Vulnerabilities (PASSED)[/bold green]"
 
 
 def render_master_summary(
@@ -506,12 +527,22 @@ def render_master_summary(
     skipped = sum(1 for m in module_outcomes if m["status"] == "skipped")
     errored = sum(1 for m in module_outcomes if m["status"] == "error")
 
+    total_vulns = 0
+    for mo in module_outcomes:
+        findings = mo.get("findings", [])
+        if mo["module"]["id"] == "bola_idor":
+            total_vulns += sum(1 for f in findings if isinstance(f, dict) and f.get("vulnerable"))
+        elif mo["module"]["id"] == "excessive_data":
+            total_vulns += sum(1 for f in findings if isinstance(f, dict) and f.get("analysis", {}).get("is_vulnerable"))
+        else:
+            total_vulns += sum(1 for f in findings if getattr(f, "is_vulnerable", False) or (isinstance(f, dict) and f.get("is_vulnerable")))
+
     separator = "━" * 80
     console.print(f"[bold red]{separator}[/bold red]")
 
     # Summary Table
     summary = Table(
-        title="[bold red]⚡ SENTINELAPI MASTER SCAN — RESULTS DASHBOARD ⚡[/bold red]",
+        title="[bold red]⚡ SENTINELAPI MASTER SCAN — LIVE AUDIT DASHBOARD ⚡[/bold red]",
         border_style="red",
         header_style="bold cyan",
         padding=(0, 2),
@@ -519,7 +550,8 @@ def render_master_summary(
     summary.add_column("#", style="dim", width=3)
     summary.add_column("Security Module", style="bold white")
     summary.add_column("OWASP", style="yellow")
-    summary.add_column("Execution Status", justify="center")
+    summary.add_column("Findings Telemetry", justify="left")
+    summary.add_column("Status", justify="center")
 
     for idx, mo in enumerate(module_outcomes, 1):
         mod = mo["module"]
@@ -530,36 +562,162 @@ def render_master_summary(
             badge = "[bold yellow]⚠ SKIPPED[/bold yellow]"
         else:
             badge = "[bold red]✖ ERROR[/bold red]"
-        summary.add_row(str(idx), f"{mod['icon']}  {mod['name']}", mod["owasp"], badge)
+
+        finding_str = _format_module_findings_for_summary(mo)
+        summary.add_row(str(idx), f"{mod['icon']}  {mod['name']}", mod["owasp"], finding_str, badge)
 
     console.print(summary)
 
     # Overall Posture
-    if errored == 0 and skipped == 0:
-        posture = "[bold green]ALL 7 MODULES EXECUTED SUCCESSFULLY[/bold green]"
-        border = "green"
-    elif errored > 0:
-        posture = f"[bold red]{errored} MODULE(S) FAILED — PARTIAL SCAN COVERAGE[/bold red]"
+    if total_vulns > 0:
+        posture = f"[bold red]CRITICAL: {total_vulns} ACTIVE VULNERABILITY FINDINGS IDENTIFIED[/bold red]"
         border = "red"
+    elif completed == len(MODULE_REGISTRY):
+        posture = "[bold green]ALL 7 MODULES EXECUTED — ZERO CRITICAL VULNERABILITIES[/bold green]"
+        border = "green"
     else:
-        posture = f"[bold yellow]{skipped} MODULE(S) SKIPPED BY USER[/bold yellow]"
+        posture = f"[bold yellow]{skipped} MODULE(S) SKIPPED / {errored} ERRORED[/bold yellow]"
         border = "yellow"
 
     console.print()
     console.print(
         Panel(
-            f"[bold white]Target API:[/bold white]       [bold cyan]{spec.title}[/bold cyan]\n"
-            f"[bold white]Base URL:[/bold white]         [yellow]{config['base_url']}[/yellow]\n"
-            f"[bold white]Modules Run:[/bold white]      [bold green]{completed}[/bold green] / {len(MODULE_REGISTRY)}\n"
-            f"[bold white]Modules Skipped:[/bold white]  [bold yellow]{skipped}[/bold yellow]\n"
-            f"[bold white]Modules Failed:[/bold white]   [bold red]{errored}[/bold red]\n"
-            f"[bold white]Overall Status:[/bold white]   {posture}",
-            title="[bold red]⚡ FINAL ASSESSMENT POSTURE ⚡[/bold red]",
+            f"[bold white]Target API:[/bold white]          [bold cyan]{spec.title}[/bold cyan]\n"
+            f"[bold white]Base URL:[/bold white]            [yellow]{config['base_url']}[/yellow]\n"
+            f"[bold white]Total Vulnerabilities:[/bold white] [bold red]{total_vulns}[/bold red]\n"
+            f"[bold white]Modules Completed:[/bold white]     [bold green]{completed}[/bold green] / {len(MODULE_REGISTRY)}\n"
+            f"[bold white]Assessment Verdict:[/bold white]    {posture}",
+            title="[bold red]⚡ CONSOLIDATED SECURITY POSTURE ⚡[/bold red]",
             border_style=border,
             padding=(1, 2),
         )
     )
     console.print(f"[bold red]{separator}[/bold red]")
+
+
+def _build_rich_telemetry_prompt(
+    spec: ParsedSpecification,
+    config: Dict[str, Any],
+    module_outcomes: List[Dict[str, Any]],
+) -> str:
+    """Builds a comprehensive, context-dense prompt containing ALL real live telemetry from all 7 modules."""
+    lines = [
+        f"# SENTINELAPI MASTER SECURITY ASSESSMENT REPORT: {spec.title}",
+        f"- Target Base URL: {config['base_url']}",
+        f"- Specification: {spec.spec_type} (Version: {spec.version})",
+        f"- Auth Scheme: {spec.auth_scheme}",
+        f"- Total Endpoints in Inventory: {len(spec.endpoints)}",
+        f"- Parameterized Routes Tested: {len(spec.parameterized_endpoints)}",
+        "",
+        "## DETAILED LIVE TEST TELEMETRY BY OWASP CATEGORY:",
+    ]
+
+    for mo in module_outcomes:
+        mod = mo["module"]
+        findings = mo.get("findings", [])
+        status = mo.get("status")
+
+        lines.append(f"\n### [{mod['owasp']}] {mod['name']}")
+        lines.append(f"Execution Status: {status}")
+
+        if not findings:
+            lines.append("Telemetry: No findings recorded or module skipped.")
+            continue
+
+        if mod["id"] == "bola_idor":
+            vulns = [f for f in findings if isinstance(f, dict) and f.get("vulnerable")]
+            lines.append(f"- Total Candidate Object Endpoints Tested: {len(findings)}")
+            lines.append(f"- Vulnerabilities Confirmed: {len(vulns)}")
+            for idx, f in enumerate(findings, 1):
+                ep = f.get("endpoint")
+                ep_str = f"{ep.method} {ep.path}" if ep else "Route"
+                is_v = "VULNERABLE (BOLA LEAK)" if f.get("vulnerable") else "SECURED (403/401 DENIED)"
+                lines.append(f"  {idx}. {ep_str} -> Baseline: {f.get('baseline_status')} | Attack: {f.get('attack_status')} | Verdict: {is_v}")
+
+        elif mod["id"] == "excessive_data":
+            vulns = [f for f in findings if isinstance(f, dict) and f.get("analysis", {}).get("is_vulnerable")]
+            lines.append(f"- Total Endpoints Inspected for Data Overexposure: {len(findings)}")
+            lines.append(f"- Endpoints Leaking Sensitive/Excessive Data: {len(vulns)}")
+            for idx, f in enumerate(findings, 1):
+                ep = f.get("endpoint")
+                ep_str = f"{ep.method} {ep.path}" if ep else "Route"
+                ana = f.get("analysis", {})
+                if ana.get("is_vulnerable"):
+                    lines.append(f"  {idx}. [LEAK DETECTED] {ep_str} (HTTP {f.get('status_code')}) - Severity: {ana.get('severity')}")
+                    for fd in ana.get("findings", []):
+                        lines.append(f"     * Leaked Field: `{fd.get('key')}` (Value snippet: {str(fd.get('value'))[:60]}) -> {fd.get('reason')}")
+                else:
+                    lines.append(f"  {idx}. [CLEAN] {ep_str} (HTTP {f.get('status_code')}) - No sensitive fields leaked")
+
+        elif mod["id"] == "auth_misconfig":
+            vulns = [f for f in findings if getattr(f, "is_vulnerable", False)]
+            lines.append(f"- Total Authentication Test Vectors Evaluated: {len(findings)}")
+            lines.append(f"- Broken Authentication Vectors: {len(vulns)}")
+            for idx, f in enumerate(findings, 1):
+                is_v = "BYPASS SUCCESS (VULNERABLE)" if getattr(f, "is_vulnerable", False) else "PROPERLY REJECTED (PASS)"
+                lines.append(f"  {idx}. {getattr(f, 'endpoint', '')} | Vector: {getattr(f, 'test_name', '')} | Verdict: {is_v} (HTTP {getattr(f, 'status_code', '')})")
+                if getattr(f, "is_vulnerable", False):
+                    lines.append(f"     Reason: {getattr(f, 'reason', '')}")
+
+        elif mod["id"] == "rate_limiting":
+            vulns = [f for f in findings if getattr(f, "is_vulnerable", False)]
+            lines.append(f"- Total Routes Tested for Rate Limiting / Burst Exhaustion: {len(findings)}")
+            lines.append(f"- Unrestricted Endpoints (Missing Rate Limit): {len(vulns)}")
+            for idx, f in enumerate(findings, 1):
+                is_v = "UNRESTRICTED (VULNERABLE)" if getattr(f, "is_vulnerable", False) else "RATE LIMITED (429 ENFORCED)"
+                lines.append(f"  {idx}. {getattr(f, 'endpoint', '')} -> Total Requests: {getattr(f, 'requests_sent', 20)} | Successful: {getattr(f, 'success_count', '')} | 429 Responses: {getattr(f, 'rate_limited_count', '')} | Verdict: {is_v}")
+
+        elif mod["id"] == "bfla":
+            vulns = [f for f in findings if getattr(f, "is_vulnerable", False)]
+            lines.append(f"- Total Privileged / Administrative Endpoints Tested: {len(findings)}")
+            lines.append(f"- Privilege Escalation Vulnerabilities: {len(vulns)}")
+            for idx, f in enumerate(findings, 1):
+                is_v = "PRIVILEGE ESCALATION BYPASS (VULNERABLE)" if getattr(f, "is_vulnerable", False) else "PROPERLY BLOCKED (403 FORBIDDEN)"
+                lines.append(f"  {idx}. {getattr(f, 'method', '')} {getattr(f, 'endpoint', '')} -> Status: {getattr(f, 'status_code', '')} | Verdict: {is_v}")
+
+        elif mod["id"] == "sec_misconfig":
+            vulns = [f for f in findings if getattr(f, "is_vulnerable", False)]
+            lines.append(f"- Security Header & Cookie Misconfiguration Checks: {len(findings)}")
+            lines.append(f"- Misconfigurations / Missing Headers: {len(vulns)}")
+            for idx, f in enumerate(findings, 1):
+                if getattr(f, "is_vulnerable", False):
+                    lines.append(f"  * [{getattr(f, 'severity', 'MEDIUM')}] {getattr(f, 'endpoint', '')} -> {getattr(f, 'test_name', '')}: {getattr(f, 'reason', '')}")
+
+        elif mod["id"] == "shadow_zombie":
+            vulns = [f for f in findings if getattr(f, "is_vulnerable", False)]
+            lines.append(f"- Total Shadow / Zombie / Hidden Candidate Routes Probed: {len(findings)}")
+            lines.append(f"- Undocumented / Zombie Endpoints Discovered Live: {len(vulns)}")
+            for idx, f in enumerate(findings, 1):
+                if getattr(f, "is_vulnerable", False):
+                    lines.append(f"  * [EXPOSED ASSET] {getattr(f, 'method', '')} {getattr(f, 'path', '')} (HTTP {getattr(f, 'status_code', '')}) - {getattr(f, 'category', '')}: {getattr(f, 'reason', '')}")
+
+    lines.extend([
+        "",
+        "## INSTRUCTIONS FOR MASTER AI SECURITY REPORT:",
+        "You are SentinelAPI Core Security Intelligence Engine. You are analyzing the REAL LIVE test findings provided above.",
+        "Produce an authoritative, complete, comprehensive security intelligence report in structured GitHub Markdown.",
+        "Ensure ALL sections below are thoroughly detailed without omitting anything or stopping abruptly:",
+        "",
+        "### 1. Executive Threat Posture & Assessment Overview",
+        "Summarize the overall security health of this API based on the real findings across all 7 OWASP categories.",
+        "",
+        "### 2. Consolidated Vulnerability Breakdown (By OWASP Category)",
+        "Detail the exact findings for each of the 7 modules tested, referencing specific endpoints and parameters from the live telemetry above.",
+        "",
+        "### 3. Critical Risk Matrix",
+        "Provide a markdown table ranking the identified risks with columns: Rank, Vulnerability, OWASP Category, Affected Endpoints, Severity (CRITICAL/HIGH/MEDIUM/LOW), Likelihood, Impact, Mitigation Priority.",
+        "",
+        "### 4. Real-World Attack Chain Scenarios",
+        "Describe step-by-step how an adversary could chain these specific vulnerabilities together (e.g. using excessive data exposure to find user IDs, then exploiting BFLA or rate limits).",
+        "",
+        "### 5. Production Code Hardening & Remediation Blueprint",
+        "Provide concrete, production-ready code fixes (Node.js/Express or Python/FastAPI) for the top vulnerabilities discovered.",
+        "",
+        "### 6. Compliance & Regulatory Audit Summary",
+        "Map these specific findings to regulatory frameworks: PCI-DSS v4.0, GDPR Article 32, and SOC 2 Type II.",
+    ])
+
+    return "\n".join(lines)
 
 
 def render_master_ai_overview(
@@ -570,64 +728,13 @@ def render_master_ai_overview(
     """Generates and renders a unified AI security overview across all modules."""
     console.print()
 
-    # Build consolidated prompt
-    prompt_lines = [
-        f"# SENTINELAPI FULL-SUITE SECURITY ASSESSMENT: {spec.title}",
-        f"- Target Base URL: {spec.base_url}",
-        f"- Specification: {spec.spec_type} (Version: {spec.version})",
-        f"- Auth Scheme: {spec.auth_scheme}",
-        f"- Total Endpoints: {len(spec.endpoints)}",
-        f"- Parameterized Routes: {len(spec.parameterized_endpoints)}",
-        "",
-        "## MODULES EXECUTED:",
-    ]
+    prompt_text = _build_rich_telemetry_prompt(spec, config, module_outcomes)
 
-    for mo in module_outcomes:
-        mod = mo["module"]
-        status_str = "✓ COMPLETED" if mo["status"] == "completed" else ("⚠ SKIPPED" if mo["status"] == "skipped" else "✖ ERROR")
-        prompt_lines.append(f"- {mod['icon']} {mod['name']} ({mod['owasp']}): {status_str}")
-
-    prompt_lines.extend([
-        "",
-        "## ENDPOINT INVENTORY:",
-    ])
-
-    for ep in spec.endpoints:
-        prompt_lines.append(f"- {ep.method} {ep.path}: {ep.summary or 'No summary'}")
-
-    prompt_lines.extend([
-        "",
-        "## INSTRUCTIONS FOR CONSOLIDATED SECURITY INTELLIGENCE REPORT:",
-        "You are SentinelAPI Core Security Intelligence Engine. The above modules were executed against a live production API.",
-        "Provide a comprehensive, authoritative security report in structured GitHub Markdown with these sections:",
-        "",
-        "### 1. Executive Threat Summary",
-        "High-level overview of the API's overall security posture across all 7 OWASP categories tested.",
-        "",
-        "### 2. Module-by-Module Findings",
-        "For each of the 7 modules, summarize what was tested and the likely findings based on the endpoint inventory.",
-        "",
-        "### 3. Critical Risk Matrix",
-        "A prioritized table of the most critical risks discovered, ranked by severity (CRITICAL > HIGH > MEDIUM > LOW).",
-        "",
-        "### 4. Attack Chain Analysis",
-        "Describe how an attacker could chain multiple vulnerabilities together across modules.",
-        "",
-        "### 5. Production Remediation Roadmap",
-        "Concrete, prioritized remediation steps with code snippets.",
-        "",
-        "### 6. Compliance & Regulatory Impact",
-        "Map findings to PCI DSS, GDPR, and SOC 2 compliance frameworks.",
-    ])
-
-    prompt_text = "\n".join(prompt_lines)
-
-    # Stream AI response
     console.print(
         Panel(
-            "[bold cyan]Streaming consolidated security intelligence from AI engine...[/bold cyan]\n"
-            "[dim]Model will synthesize findings across all 7 OWASP modules into a unified report.[/dim]",
-            title="[bold cyan]🧠 AI SECURITY INTELLIGENCE ENGINE[/bold cyan]",
+            "[bold cyan]Synthesizing live vulnerability findings across all 7 OWASP modules...[/bold cyan]\n"
+            "[dim]Feeding real HTTP response telemetry, sensitive field leaks, and bypass proofs to AI engine.[/dim]",
+            title="[bold cyan]🧠 AI SECURITY INTELLIGENCE ENGINE (FULL SUITE)[/bold cyan]",
             border_style="cyan",
             padding=(0, 2),
         )
@@ -647,19 +754,23 @@ def render_master_ai_overview(
             return
 
         token_est = estimate_token_usage(prompt_text)
-        console.print(f"[dim]Model: {ai_cfg['model']} | Est. Tokens: ~{token_est['estimated_total_tokens']:,}[/dim]")
+        console.print(f"[dim]Model: {ai_cfg['model']} | Telemetry Payload: {token_est['char_count']} chars (~{token_est['prompt_tokens']} tokens)[/dim]")
 
         with Progress(
             SpinnerColumn(spinner_name="dots"),
             TextColumn("[bold cyan]{task.description}[/bold cyan]"),
             console=console,
         ) as progress:
-            task = progress.add_task("Generating AI Security Intelligence Report...", total=None)
+            task = progress.add_task("Generating Full-Suite AI Security Intelligence Report...", total=None)
 
             def update_spinner(count):
-                progress.update(task, description=f"AI Engine streaming... ({count} tokens received)")
+                progress.update(task, description=f"AI Engine streaming report... ({count} tokens received)")
 
-            success, response_text = request_ai_overview(prompt_text, progress_callback=update_spinner)
+            success, response_text = request_ai_overview(
+                prompt_text,
+                progress_callback=update_spinner,
+                max_tokens=4000,
+            )
 
         if success and response_text:
             console.print()
@@ -677,11 +788,11 @@ def render_master_ai_overview(
             timestamp = time.strftime("%Y%m%d_%H%M%S")
             report_file = MARKDOWN_DIR / f"master_scan_report_{timestamp}.md"
             with open(report_file, "w", encoding="utf-8") as f:
-                f.write(f"# SentinelAPI Full-Suite Security Report\n")
-                f.write(f"**Target:** {spec.title} ({spec.base_url})\n")
+                f.write(f"# SentinelAPI Full-Suite Security Assessment Report\n")
+                f.write(f"**Target:** {spec.title} ({config['base_url']})\n")
                 f.write(f"**Generated:** {time.strftime('%Y-%m-%d %H:%M:%S')}\n\n")
                 f.write(response_text)
-            console.print(f"\n[bold green]✓[/bold green] Report saved → [bold cyan]{report_file}[/bold cyan]")
+            console.print(f"\n[bold green]✓[/bold green] Complete report saved → [bold cyan]{report_file}[/bold cyan]")
         else:
             console.print(f"\n[bold yellow]⚠ AI report generation failed:[/bold yellow] {response_text}")
 

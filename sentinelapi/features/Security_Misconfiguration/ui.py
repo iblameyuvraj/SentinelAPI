@@ -218,6 +218,7 @@ def run_full_sec_misconfig_audit(spec: ParsedSpecification, config: Dict[str, An
 
     # Render Results
     display_sec_misconfig_results(spec, all_findings, config)
+    return all_findings
 
 
 def display_sec_misconfig_results(

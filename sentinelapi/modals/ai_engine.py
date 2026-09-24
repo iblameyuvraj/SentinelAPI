@@ -130,6 +130,7 @@ def build_bola_ai_prompt(
 def request_ai_overview(
     prompt_text: str,
     progress_callback: Optional[Callable[[int], None]] = None,
+    max_tokens: int = 4000,
 ) -> Tuple[bool, str]:
     """Streams the security prompt to the active LLM provider and returns the complete markdown response."""
     ai_cfg = get_active_ai_config()
@@ -152,7 +153,8 @@ def request_ai_overview(
     system_prompt = (
         "You are SentinelAPI Core Security Intelligence Engine, a senior zero-trust API security auditor. "
         "Analyze the provided API vulnerability telemetry and provide an authoritative, high-level executive security overview "
-        "and production-ready code remediation in clean, structured GitHub Markdown with code blocks."
+        "and production-ready code remediation in clean, structured GitHub Markdown with code blocks. "
+        "Ensure your response is completely finished and never truncated."
     )
 
     payload = {
@@ -162,7 +164,7 @@ def request_ai_overview(
             {"role": "user", "content": prompt_text},
         ],
         "stream": True,
-        "max_tokens": 1200,
+        "max_tokens": max_tokens,
         "temperature": 0.2,
     }
 

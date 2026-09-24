@@ -372,6 +372,8 @@ def display_rate_limit_results(
     except (KeyboardInterrupt, EOFError):
         pass
 
+    return findings
+
 
 def display_rate_limit_code_remediation():
     """Renders production code fixes for Express.js and FastAPI."""
