@@ -1,0 +1,64 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Fluffwalks Web API (Live)",
+    "description": "Live production endpoints for Fluffwalks (fluffwalks.in) Excessive Data Exposure & Sensitive Data Leakage Audit.",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "https://www.fluffwalks.in",
+      "description": "Fluffwalks Live Production Server"
+    },
+    {
+      "url": "http://localhost:3000",
+      "description": "Fluffwalks Local Next.js Development Server"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "cookieAuth": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "sb-lbvrdowxiffmoacfuoiy-auth-token"
+      },
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    }
+  },
+  "paths": {
+    "/api/user/profile": {
+      "get": {
+        "summary": "Customer Profile & Addresses",
+        "description": "Audits user profile, contact info, pets array, and address records for data leaks.",
+        "responses": {
+          "200": { "description": "Profile data" },
+          "401": { "description": "Unauthorized" }
+        }
+      }
+    },
+    "/api/user/rides": {
+      "get": {
+        "summary": "Customer Dog Walking Bookings History",
+        "description": "Audits booked ride records, live GPS locations, and payment amounts.",
+        "responses": {
+          "200": { "description": "Rides list" },
+          "401": { "description": "Unauthorized" }
+        }
+      }
+    },
+    "/api/user/boardings": {
+      "get": {
+        "summary": "Customer Home Boarding Bookings",
+        "description": "Audits home boarding stay records and boarder assignments.",
+        "responses": {
+          "200": { "description": "Boardings list" },
+          "401": { "description": "Unauthorized" }
+        }
+      }
+    }
+  }
+}

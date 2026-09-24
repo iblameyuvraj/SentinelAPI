@@ -218,6 +218,11 @@ def render_vulnerability_menu(spec: ParsedSpecification):
             run_bola_idor_flow(spec)
             continue
 
+        if "3. Excessive Data Exposure" in chosen_test:
+            from sentinelapi.Excessive_Data_Exposure import run_excessive_data_flow
+            run_excessive_data_flow(spec)
+            continue
+
         # UI Preview Card for remaining modules
         console.print()
         preview_table = Table(box=None, show_header=False, padding=(0, 2))

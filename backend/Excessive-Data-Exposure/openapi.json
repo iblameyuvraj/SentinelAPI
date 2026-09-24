@@ -1,0 +1,163 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Excessive Data Exposure Test API",
+    "description": "Sandbox API for validating OWASP API3:2023 Excessive Data Exposure detection in SentinelAPI.",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8002",
+      "description": "Local Vulnerable Excessive Data Backend (Port 8002)"
+    },
+    {
+      "url": "http://localhost:8003",
+      "description": "Local Secured Excessive Data Backend (Port 8003)"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    },
+    "schemas": {
+      "UserPublic": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer", "example": 101 },
+          "name": { "type": "string", "example": "Yuvraj" },
+          "username": { "type": "string", "example": "yuvraj_dev" }
+        },
+        "required": ["id", "name", "username"]
+      },
+      "UserProfilePublic": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer", "example": 101 },
+          "name": { "type": "string", "example": "Yuvraj" },
+          "username": { "type": "string", "example": "yuvraj_dev" },
+          "email": { "type": "string", "example": "yuvraj@example.com" }
+        },
+        "required": ["id", "name", "username", "email"]
+      },
+      "ProductPublic": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer", "example": 501 },
+          "title": { "type": "string", "example": "Cloud Microservices Security Scanner" },
+          "description": { "type": "string", "example": "Enterprise zero-trust API scanning suite." },
+          "retail_price": { "type": "number", "example": 299 }
+        },
+        "required": ["id", "title", "retail_price"]
+      },
+      "HealthResponse": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string", "example": "online" },
+          "target": { "type": "string", "example": "Excessive Data Exposure Backend" },
+          "timestamp": { "type": "string", "example": "2026-09-24T12:00:00Z" }
+        }
+      }
+    }
+  },
+  "paths": {
+    "/api/users/{userId}": {
+      "get": {
+        "summary": "Retrieve user account data",
+        "description": "Returns user account object. Vulnerable servers return internal password hashes and PII.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "integer", "example": 101 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "User details successfully retrieved",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/UserPublic" }
+              }
+            }
+          },
+          "401": { "description": "Unauthorized" },
+          "404": { "description": "User not found" }
+        }
+      }
+    },
+    "/api/users/{userId}/profile": {
+      "get": {
+        "summary": "Retrieve user profile details",
+        "description": "Returns public user profile. Vulnerable servers leak MFA secrets and internal roles.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "integer", "example": 101 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Profile details retrieved",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/UserProfilePublic" }
+              }
+            }
+          },
+          "401": { "description": "Unauthorized" },
+          "404": { "description": "User not found" }
+        }
+      }
+    },
+    "/api/products/{productId}": {
+      "get": {
+        "summary": "Get product public catalog info",
+        "description": "Public product lookup. Vulnerable servers leak internal supplier wholesale secrets and markup margins.",
+        "parameters": [
+          {
+            "name": "productId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "integer", "example": 501 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Product details",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ProductPublic" }
+              }
+            }
+          },
+          "404": { "description": "Product not found" }
+        }
+      }
+    },
+    "/api/system/health": {
+      "get": {
+        "summary": "System service health check",
+        "description": "Baseline health probe returning non-sensitive metadata.",
+        "responses": {
+          "200": {
+            "description": "Health status",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HealthResponse" }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
