@@ -1,0 +1,106 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Rate Limiting & Resource Exhaustion Test API",
+    "description": "Sandbox API for validating OWASP API4:2023 Unrestricted Resource Consumption & Rate Limiting detection in SentinelAPI.",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8006",
+      "description": "Local Vulnerable Rate Limiting Backend (Port 8006)"
+    },
+    {
+      "url": "http://localhost:8007",
+      "description": "Local Hardened Rate Limiting Backend (Port 8007)"
+    }
+  ],
+  "paths": {
+    "/api/public/status": {
+      "get": {
+        "summary": "Check public service health",
+        "description": "High-throughput public baseline endpoint.",
+        "responses": {
+          "200": {
+            "description": "Service health status"
+          }
+        }
+      }
+    },
+    "/api/auth/login": {
+      "post": {
+        "summary": "User authentication login",
+        "description": "Sensitive authentication route prone to brute-force credential stuffing.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "username": { "type": "string", "example": "testuser" },
+                  "password": { "type": "string", "example": "password123" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Authentication successful" },
+          "429": { "description": "Too Many Requests - Throttled" }
+        }
+      }
+    },
+    "/api/auth/forgot-password": {
+      "post": {
+        "summary": "Trigger password reset email/SMS",
+        "description": "Sensitive OTP/Email route susceptible to denial-of-wallet and inbox bombing.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "email": { "type": "string", "example": "user@example.com" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Reset token dispatched" },
+          "429": { "description": "Too Many Requests - Throttled" }
+        }
+      }
+    },
+    "/api/search": {
+      "get": {
+        "summary": "Heavy query search engine",
+        "description": "Computationally heavy endpoint prone to thread starvation and database DoS.",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": { "description": "Search results" },
+          "429": { "description": "Too Many Requests - Throttled" }
+        }
+      }
+    },
+    "/api/user/export": {
+      "get": {
+        "summary": "Download full user archive export",
+        "description": "Bandwidth intensive endpoint prone to outbound network exhaustion.",
+        "responses": {
+          "200": { "description": "Archive binary download" },
+          "429": { "description": "Too Many Requests - Throttled" }
+        }
+      }
+    }
+  }
+}

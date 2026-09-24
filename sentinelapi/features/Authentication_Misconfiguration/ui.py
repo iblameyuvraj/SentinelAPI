@@ -383,7 +383,10 @@ def display_auth_results(
     # AI Security Analysis Flow
     prompt_ai_auth_overview(spec, findings, config)
 
-    input("\nPress Enter to return to Authentication Misconfiguration menu...")
+    try:
+        input("\nPress Enter to return to Authentication Misconfiguration menu...")
+    except (KeyboardInterrupt, EOFError):
+        pass
 
 
 def display_code_remediation():
@@ -681,4 +684,7 @@ def inspect_auth_endpoints(endpoints: List[APIEndpointInfo]):
         t.add_row(ep.path, method_style, ep.summary or "Endpoint", sec_label)
 
     console.print(t)
-    input("\nPress Enter to return to menu...")
+    try:
+        input("\nPress Enter to return to menu...")
+    except (KeyboardInterrupt, EOFError):
+        pass

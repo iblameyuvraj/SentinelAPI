@@ -199,7 +199,7 @@ def render_vulnerability_menu(spec: ParsedSpecification):
             "3. Excessive Data Exposure",
             "4. Authentication Misconfiguration",
             "5. Rate Limiting",
-            "6. Back to API Source",
+            "6. Close SentinelAPI",
         ]
 
         try:
@@ -211,7 +211,7 @@ def render_vulnerability_menu(spec: ParsedSpecification):
         except (KeyboardInterrupt, EOFError):
             return
 
-        if not chosen_test or "6. Back" in chosen_test:
+        if not chosen_test or chosen_test.startswith("6."):
             return
 
         if "2. BOLA / IDOR" in chosen_test:
@@ -226,6 +226,11 @@ def render_vulnerability_menu(spec: ParsedSpecification):
         if "4. Authentication Misconfiguration" in chosen_test:
             from sentinelapi.features.Authentication_Misconfiguration import run_auth_misconfig_flow
             run_auth_misconfig_flow(spec)
+            continue
+
+        if "5. Rate Limiting" in chosen_test:
+            from sentinelapi.features.Rate_Limiting import run_rate_limiting_flow
+            run_rate_limiting_flow(spec)
             continue
 
         # UI Preview Card for remaining modules
