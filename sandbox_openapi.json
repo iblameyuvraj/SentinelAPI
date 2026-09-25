@@ -8,14 +8,22 @@
       "name": "Yuvraj Soni",
       "email": "yuvrajjsoni17@gmail.com"
     },
-    "x-generated-at": "2026-09-25T00:34:28.508006+00:00",
+    "x-generated-at": "2026-09-25T00:54:48.413651+00:00",
     "x-git-branch": "deployment",
-    "x-git-commit": "c083427",
+    "x-git-commit": "5dd395e",
     "x-generator": "SentinelAPI CI/CD OpenAPI Generator"
   },
   "servers": [
     {
-      "url": "\u2139\ufe0f  Querying Vercel API for latest preview deployment...\n   Project: prj_lLmnYcEaAGaqId5Uzskjpt9vIySH\nhttps://fluffwalks-website-crzkjqef7-fluff-walks.vercel.app",
+      "url": "https://fluffwalks-website-7h3zhw2yg-fluff-walks.vercel.app",
+      "description": "Live Preview Deployment (Vercel / Dynamic CI)"
+    },
+    {
+      "url": "https://fluffwalks-website-rujbpxgbq-fluff-walks.vercel.app",
+      "description": "Live Preview Deployment (Vercel / Dynamic CI)"
+    },
+    {
+      "url": "https://fluffwalks-website-7kibn4f6x-fluff-walks.vercel.app",
       "description": "Live Preview Deployment (Vercel / Dynamic CI)"
     },
     {

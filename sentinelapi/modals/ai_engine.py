@@ -22,7 +22,7 @@ def get_active_ai_config() -> Dict[str, Any]:
     """Retrieves current AI provider configuration from environment or .env file."""
     load_dotenv(dotenv_path=ENV_FILE, override=True)
 
-    provider = os.getenv("SENTINEL_AI_PROVIDER", "custom").strip().lower()
+    provider = os.getenv("SENTINEL_AI_PROVIDER", "custom").strip().strip("'\"").lower()
     model = (
         os.getenv("SENTINEL_AI_MODEL")
         or os.getenv("CUSTOM_LLM_MODEL")
@@ -31,12 +31,12 @@ def get_active_ai_config() -> Dict[str, Any]:
         or os.getenv("GEMINI_MODEL")
         or os.getenv("XAI_MODEL")
         or "openai/gpt-oss-20b"
-    ).strip()
+    ).strip().strip("'\"")
 
     base_url = (
         os.getenv("CUSTOM_LLM_BASE_URL")
         or "https://integrate.api.nvidia.com/v1"
-    ).strip().rstrip("/")
+    ).strip().strip("'\"").rstrip("/")
 
     api_key = (
         os.getenv("CUSTOM_LLM_API_KEY")
@@ -45,7 +45,7 @@ def get_active_ai_config() -> Dict[str, Any]:
         or os.getenv("GEMINI_API_KEY")
         or os.getenv("XAI_API_KEY")
         or ""
-    ).strip()
+    ).strip().strip("'\"")
 
     return {
         "provider": provider,

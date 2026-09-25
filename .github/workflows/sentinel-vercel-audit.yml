@@ -108,10 +108,17 @@ import sys, json
 try:
     data = json.load(sys.stdin)
     deps = data.get('deployments', [])
+    # 1. Prioritize non-production preview deployments
     for d in deps:
-        if d.get('readyState') == 'READY':
+        if d.get('readyState') == 'READY' and d.get('target') != 'production':
             print('https://' + d['url'])
             break
+    else:
+        # 2. Fallback to any ready deployment
+        for d in deps:
+            if d.get('readyState') == 'READY':
+                print('https://' + d['url'])
+                break
 except:
     pass
 " 2>/dev/null || true)
