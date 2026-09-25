@@ -95,37 +95,28 @@ jobs:
 
           # 2. Vercel Preview Deploy & API Resolution
           if [ -z "$PREVIEW_URL" ] && [ -n "$VERCEL_TOKEN" ]; then
-            echo "📦 Attempting Vercel deployment with CLI..."
-            DEPLOY_OUTPUT=$(vercel deploy --yes --token="$VERCEL_TOKEN" 2>&1 || true)
-            CLI_URL=$(echo "$DEPLOY_OUTPUT" | grep -oE 'https://[^ ]*\.vercel\.app' | tail -n 1 || true)
-
-            if [ -n "$CLI_URL" ]; then
-              PREVIEW_URL="$CLI_URL"
-              echo "✓ Deployed via Vercel CLI: $PREVIEW_URL"
+            echo "ℹ️  Querying Vercel API for latest ready preview deployment on project $VERCEL_PROJECT_ID..."
+            TEAM_PARAM=""
+            if [ -n "$VERCEL_ORG_ID" ]; then
+              TEAM_PARAM="&teamId=$VERCEL_ORG_ID"
+            fi
+            
+            API_RESP=$(curl -s -H "Authorization: Bearer $VERCEL_TOKEN" \
+              "https://api.vercel.com/v6/deployments?projectId=${VERCEL_PROJECT_ID}${TEAM_PARAM}&limit=5")
+            
+            # First try latest ready deployment URL
+            READY_URL=$(echo "$API_RESP" | jq -r '.deployments[] | select(.readyState=="READY") | .url' | head -n 1)
+            if [ -n "$READY_URL" ] && [ "$READY_URL" != "null" ]; then
+              PREVIEW_URL="https://$READY_URL"
+              echo "✓ Resolved live Vercel Preview URL from Vercel API: $PREVIEW_URL"
             else
-              echo "ℹ️  Querying Vercel API for latest ready deployment on project $VERCEL_PROJECT_ID..."
-              TEAM_PARAM=""
-              if [ -n "$VERCEL_ORG_ID" ]; then
-                TEAM_PARAM="&teamId=$VERCEL_ORG_ID"
-              fi
-              
-              API_RESP=$(curl -s -H "Authorization: Bearer $VERCEL_TOKEN" \
-                "https://api.vercel.com/v6/deployments?projectId=${VERCEL_PROJECT_ID}${TEAM_PARAM}&limit=5")
-              
-              # First try public alias if available (bypasses Vercel SSO protection on preview domains)
+              # Fallback to project alias
               PROJECT_INFO=$(curl -s -H "Authorization: Bearer $VERCEL_TOKEN" \
                 "https://api.vercel.com/v9/projects/${VERCEL_PROJECT_ID}?${TEAM_PARAM#&}")
-              
-              PRIMARY_ALIAS=$(echo "$PROJECT_INFO" | jq -r '.targets.production.alias[1] // .targets.production.alias[0] // empty')
+              PRIMARY_ALIAS=$(echo "$PROJECT_INFO" | jq -r '.targets.production.alias[0] // empty')
               if [ -n "$PRIMARY_ALIAS" ] && [ "$PRIMARY_ALIAS" != "null" ]; then
                 PREVIEW_URL="https://$PRIMARY_ALIAS"
                 echo "✓ Resolved live accessible Vercel target via Project Alias: $PREVIEW_URL"
-              else
-                READY_URL=$(echo "$API_RESP" | jq -r '.deployments[] | select(.readyState=="READY") | .url' | head -n 1)
-                if [ -n "$READY_URL" ] && [ "$READY_URL" != "null" ]; then
-                  PREVIEW_URL="https://$READY_URL"
-                  echo "✓ Resolved live deployment URL from Vercel API: $PREVIEW_URL"
-                fi
               fi
             fi
           fi

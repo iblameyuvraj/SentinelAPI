@@ -13,6 +13,25 @@ TARGET_URL="${2:-https://fluffwalks-website.vercel.app}"
 SPEC_FILE="sandbox_openapi.json"
 AUTH_FILE="fluffwalks-test-case/auth_session.json"
 
+# Check for local fluffwalks-web Next.js app to deploy fresh preview
+FLUFFWALKS_DIR="${FLUFFWALKS_DIR:-/Users/yuvraj/Documents/company-work/fluffwalks/website/fluffwalks-web}"
+if [ -d "$FLUFFWALKS_DIR" ] && command -v vercel &>/dev/null; then
+    echo "📦 Creating fresh Vercel Preview Deployment for Next.js app in:"
+    echo "   $FLUFFWALKS_DIR"
+    CURR_DIR="$(pwd)"
+    cd "$FLUFFWALKS_DIR"
+    DEPLOY_OUT=$(vercel deploy --yes 2>&1 || true)
+    cd "$CURR_DIR"
+
+    NEW_PREVIEW=$(echo "$DEPLOY_OUT" | grep -oE 'https://[^ ]*\.vercel\.app' | tail -n 1 || true)
+    if [ -n "$NEW_PREVIEW" ]; then
+        TARGET_URL="$NEW_PREVIEW"
+        echo "✓ Fresh Vercel Preview URL created: $TARGET_URL"
+    else
+        echo "⚠️ Note: Could not extract new URL, defaulting to $TARGET_URL"
+    fi
+fi
+
 echo "================================================================================"
 echo "🚀 SENTINELAPI — ONE-COMMAND DEPLOYMENT PIPELINE"
 echo "================================================================================"
