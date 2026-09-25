@@ -18,6 +18,7 @@ build/
 .env
 .env.local
 
+
 # Reports directory (mounted dynamically at runtime)
 markdown/*.pdf
 markdown/*.md
