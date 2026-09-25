@@ -162,22 +162,37 @@ jobs:
         env:
           PREVIEW_URL: ${{ steps.preview-deploy.outputs.preview_url }}
           BEARER_TOKEN: ${{ secrets.AUDIT_BEARER_TOKEN }}
-          COOKIE_STRING: ${{ secrets.AUDIT_COOKIE_STRING }}
+          CUSTOM_LLM_BASE_URL: ${{ secrets.CUSTOM_LLM_BASE_URL }}
+          CUSTOM_LLM_API_KEY: ${{ secrets.CUSTOM_LLM_API_KEY }}
+          SENTINEL_AI_PROVIDER: ${{ secrets.SENTINEL_AI_PROVIDER }}
+          SENTINEL_AI_MODEL: ${{ secrets.SENTINEL_AI_MODEL }}
+          CUSTOM_LLM_MODEL: ${{ secrets.CUSTOM_LLM_MODEL }}
+          BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
+          BREVO_SENDER_EMAIL: ${{ secrets.BREVO_SENDER_EMAIL }}
+          BREVO_SENDER_NAME: ${{ secrets.BREVO_SENDER_NAME }}
+          ALERT_RECIPIENT_EMAIL: ${{ secrets.ALERT_RECIPIENT_EMAIL }}
         run: |
           mkdir -p markdown
           
           SCAN_CODE=0
           docker run --rm \
             --network host \
+            -e CUSTOM_LLM_BASE_URL="$CUSTOM_LLM_BASE_URL" \
+            -e CUSTOM_LLM_API_KEY="$CUSTOM_LLM_API_KEY" \
+            -e SENTINEL_AI_PROVIDER="$SENTINEL_AI_PROVIDER" \
+            -e SENTINEL_AI_MODEL="$SENTINEL_AI_MODEL" \
+            -e CUSTOM_LLM_MODEL="$CUSTOM_LLM_MODEL" \
+            -e BREVO_API_KEY="$BREVO_API_KEY" \
+            -e BREVO_SENDER_EMAIL="$BREVO_SENDER_EMAIL" \
+            -e BREVO_SENDER_NAME="$BREVO_SENDER_NAME" \
+            -e ALERT_RECIPIENT_EMAIL="$ALERT_RECIPIENT_EMAIL" \
             -v "$PWD/markdown:/app/markdown" \
             sentinelapi \
             --spec sandbox_openapi.json \
             --base-url "$PREVIEW_URL" \
             --token "$BEARER_TOKEN" \
             --cookie "$COOKIE_STRING" \
-            --ci \
-            --no-ai \
-            --no-email || SCAN_CODE=$?
+            --ci || SCAN_CODE=$?
 
           echo "scan_exit_code=$SCAN_CODE" >> $GITHUB_OUTPUT
           

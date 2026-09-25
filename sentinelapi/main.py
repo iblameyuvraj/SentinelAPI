@@ -1,4 +1,5 @@
 """SentinelAPI Entry Point."""
+import os
 import sys
 import argparse
 from pathlib import Path
@@ -89,7 +90,7 @@ def main():
             "base_token": args.token,
             "generate_ai": not args.no_ai,
             "send_email": send_email,
-            "recipient_email": recipient or "yuvrajjsoni17@gmail.com",
+            "recipient_email": recipient or os.getenv("ALERT_RECIPIENT_EMAIL", "yuvrajjsoni17@gmail.com"),
         }
 
         console.print(f"[bold cyan]Launching automated SentinelAPI master scan against {base_url}...[/bold cyan]\n")

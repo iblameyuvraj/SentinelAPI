@@ -49,22 +49,26 @@ if [ -f "$AUTH_FILE" ] && command -v jq &>/dev/null; then
     COOKIE_STRING=$(jq -r '.cookie_string // empty' "$AUTH_FILE")
 fi
 
-# 5. Run Security Audit against Endpoints
+# 5. Run Security Audit against Endpoints (with AI & Email reporting enabled)
 echo ""
-echo "🛡️  Step 3/4: Testing endpoints with SentinelAPI non-interactive scan..."
+echo "🛡️  Step 3/4: Testing endpoints with SentinelAPI non-interactive scan (AI & Email enabled)..."
 mkdir -p markdown
+
+ENV_ARGS=""
+if [ -f ".env" ]; then
+    ENV_ARGS="--env-file .env"
+fi
 
 SCAN_EXIT=0
 docker run --rm \
+    $ENV_ARGS \
     -v "$(pwd)/markdown:/app/markdown" \
     sentinelapi \
     --spec "$SPEC_FILE" \
     --base-url "$TARGET_URL" \
     --token "$BEARER_TOKEN" \
     --cookie "$COOKIE_STRING" \
-    --ci \
-    --no-ai \
-    --no-email || SCAN_EXIT=$?
+    --ci || SCAN_EXIT=$?
 
 
 echo ""

@@ -1,0 +1,177 @@
+# ==============================================================================
+# Fluffwalks Web — Automated Vercel Preview Security Audit via SentinelAPI
+#
+# Place this file in your `fluffwalks-web` repository at:
+# .github/workflows/sentinel-audit.yml
+# ==============================================================================
+
+name: SentinelAPI Security Gate (Vercel Preview)
+
+on:
+  pull_request:
+    branches: [ main, master, staging ]
+  workflow_dispatch:
+
+jobs:
+  security-audit:
+    name: 🛡️ OWASP API Security Audit (Preview Gate)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - name: 📥 Check out fluffwalks-web repository
+        uses: actions/checkout@v4
+
+      - name: 🛠️ Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: 📦 Install Vercel CLI
+        run: npm install -g vercel@latest
+
+      - name: 🚀 Deploy Ephemeral Preview to Vercel & Capture URL
+        id: vercel-deploy
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: |
+          echo "========================================================"
+          echo "🌐 DEPLOYING VERCEL PREVIEW ENVIRONMENT"
+          echo "========================================================"
+          
+          # Deploy and capture output
+          DEPLOY_OUTPUT=$(vercel deploy --yes --token="$VERCEL_TOKEN" 2>&1)
+          echo "$DEPLOY_OUTPUT"
+          
+          # Extract live .vercel.app URL
+          PREVIEW_URL=$(echo "$DEPLOY_OUTPUT" | grep -oE 'https://[^ ]*\.vercel\.app' | tail -n 1 || true)
+          
+          if [ -z "$PREVIEW_URL" ]; then
+            echo "❌ Failed to capture Vercel preview URL from output!"
+            exit 2
+          fi
+          
+          echo "preview_url=$PREVIEW_URL" >> $GITHUB_OUTPUT
+          echo "✓ Live Ephemeral Preview URL: $PREVIEW_URL"
+
+      - name: 📥 Check out SentinelAPI Scanner Engine
+        uses: actions/checkout@v4
+        with:
+          repository: iblameyuvraj/SentinelAPI
+          ref: deployment
+          path: sentinelapi-engine
+
+      - name: 🐳 Build SentinelAPI Docker Container
+        run: |
+          echo "Building SentinelAPI production security container..."
+          docker build -t sentinelapi ./sentinelapi-engine
+
+      - name: 🛡️ Execute SentinelAPI Master Security Audit (AI & Email Enabled)
+        id: sentinel-scan
+        env:
+          PREVIEW_URL: ${{ steps.vercel-deploy.outputs.preview_url }}
+          BEARER_TOKEN: ${{ secrets.AUDIT_BEARER_TOKEN }}
+          COOKIE_STRING: ${{ secrets.AUDIT_COOKIE_STRING }}
+          CUSTOM_LLM_BASE_URL: ${{ secrets.CUSTOM_LLM_BASE_URL }}
+          CUSTOM_LLM_API_KEY: ${{ secrets.CUSTOM_LLM_API_KEY }}
+          SENTINEL_AI_PROVIDER: ${{ secrets.SENTINEL_AI_PROVIDER }}
+          SENTINEL_AI_MODEL: ${{ secrets.SENTINEL_AI_MODEL }}
+          CUSTOM_LLM_MODEL: ${{ secrets.CUSTOM_LLM_MODEL }}
+          BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
+          BREVO_SENDER_EMAIL: ${{ secrets.BREVO_SENDER_EMAIL }}
+          BREVO_SENDER_NAME: ${{ secrets.BREVO_SENDER_NAME }}
+          ALERT_RECIPIENT_EMAIL: ${{ secrets.ALERT_RECIPIENT_EMAIL }}
+        run: |
+          mkdir -p markdown
+          
+          SCAN_CODE=0
+          docker run --rm \
+            -e CUSTOM_LLM_BASE_URL="$CUSTOM_LLM_BASE_URL" \
+            -e CUSTOM_LLM_API_KEY="$CUSTOM_LLM_API_KEY" \
+            -e SENTINEL_AI_PROVIDER="$SENTINEL_AI_PROVIDER" \
+            -e SENTINEL_AI_MODEL="$SENTINEL_AI_MODEL" \
+            -e CUSTOM_LLM_MODEL="$CUSTOM_LLM_MODEL" \
+            -e BREVO_API_KEY="$BREVO_API_KEY" \
+            -e BREVO_SENDER_EMAIL="$BREVO_SENDER_EMAIL" \
+            -e BREVO_SENDER_NAME="$BREVO_SENDER_NAME" \
+            -e ALERT_RECIPIENT_EMAIL="$ALERT_RECIPIENT_EMAIL" \
+            -v "$PWD/markdown:/app/markdown" \
+            sentinelapi \
+            --spec ./sandbox_openapi.json \
+            --base-url "$PREVIEW_URL" \
+            --token "$BEARER_TOKEN" \
+            --cookie "$COOKIE_STRING" \
+            --ci || SCAN_CODE=$?
+
+          echo "scan_exit_code=$SCAN_CODE" >> $GITHUB_OUTPUT
+          
+          echo "========================================================"
+          echo "📊 SENTINELAPI AUDIT CONCLUSION CODE: $SCAN_CODE"
+          if [ "$SCAN_CODE" -eq 0 ]; then
+            echo "🟢 CONCLUSION: 0 (PASS - No vulnerabilities detected)"
+          elif [ "$SCAN_CODE" -eq 1 ]; then
+            echo "🔴 CONCLUSION: 1 (FAIL - Vulnerabilities confirmed)"
+          else
+            echo "🟡 CONCLUSION: 2 (ERROR - Target unreachable or probe failure)"
+          fi
+          echo "========================================================"
+
+      - name: 📄 Upload Security Audit Reports (PDFs & Markdown)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sentinelapi-security-reports
+          path: |
+            markdown/*.pdf
+            markdown/*.md
+            markdown/*.json
+          retention-days: 14
+
+      - name: 💬 Post Security Findings on Pull Request
+        if: github.event_name == 'pull_request' && always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const exitCode = '${{ steps.sentinel-scan.outputs.scan_exit_code }}';
+            const previewUrl = '${{ steps.vercel-deploy.outputs.preview_url }}';
+            
+            let statusBadge = '🟢 **PASS (0)**';
+            let summaryMessage = '✅ All 7 OWASP modules passed cleanly! Zero confirmed vulnerabilities. PR is safe to merge.';
+            
+            if (exitCode === '1') {
+              statusBadge = '🔴 **FAIL (1)**';
+              summaryMessage = '❌ **Security vulnerabilities detected.** Review the attached PDF executive report in workflow artifacts for reproduction PoCs.';
+            } else if (exitCode === '2') {
+              statusBadge = '🟡 **ERROR (2)**';
+              summaryMessage = '⚠️ **Target host was unreachable or probe execution encountered an error.**';
+            }
+
+            const body = `### 🛡️ SentinelAPI Preview Security Gate
+| Metric | Details |
+| :--- | :--- |
+| **Target Preview URL** | \`${previewUrl}\` |
+| **Audit Conclusion** | ${statusBadge} |
+| **Security Verdict** | ${summaryMessage} |
+| **Executive Reports** | \`vulnerabilities.pdf\` & \`all_logs.pdf\` attached to workflow artifacts |
+`;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            });
+
+      - name: 🚦 Enforce CI Gate (Block PR on Vulnerabilities)
+        run: |
+          EXIT_CODE=${{ steps.sentinel-scan.outputs.scan_exit_code }}
+          if [ "$EXIT_CODE" -ne 0 ]; then
+            echo "❌ Security Gate Failed! Conclusion Code: $EXIT_CODE"
+            echo "Merging is blocked until confirmed vulnerabilities are remediated."
+            exit "$EXIT_CODE"
+          fi
+          echo "✅ Security Gate Passed Cleanly (Conclusion Code: 0)"
