@@ -37,6 +37,7 @@ jobs:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
           VERCEL_TEAM_ID: ${{ secrets.VERCEL_ORG_ID }}
+          TARGET_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           echo "========================================================"
           echo "🌐 RESOLVING VERCEL PREVIEW DEPLOYMENT (API Only)"
@@ -54,46 +55,66 @@ jobs:
           # Wait for Vercel to pick up the push and reach READY state
           for attempt in $(seq 1 $MAX_ATTEMPTS); do
             API_RESP=$(curl -sf -H "Authorization: Bearer $VERCEL_TOKEN" \
-              "https://api.vercel.com/v6/deployments?projectId=${VERCEL_PROJECT_ID}${TEAM_PARAM}&limit=5" 2>/dev/null || echo "{}")
+              "https://api.vercel.com/v6/deployments?projectId=${VERCEL_PROJECT_ID}${TEAM_PARAM}&limit=10" 2>/dev/null || echo "{}")
 
-            # Parse the latest READY deployment URL
-            READY_URL=$(echo "$API_RESP" | python3 -c "
-import sys, json
+            STATUS=$(echo "$API_RESP" | python3 -c '
+import sys, json, os
+
+commit = os.environ.get("TARGET_COMMIT", "").strip()
+
 try:
     data = json.load(sys.stdin)
-    deps = data.get('deployments', [])
-    for d in deps:
-        if d.get('readyState') == 'READY':
-            print('https://' + d['url'])
-            break
-except:
-    pass
-" 2>/dev/null || true)
+    deps = data.get("deployments", [])
+    if not deps:
+        print("WAIT:no_deployments")
+        sys.exit(0)
 
-            if [ -n "$READY_URL" ]; then
-              PREVIEW_URL="$READY_URL"
-              echo "✓ Resolved Vercel Preview URL: $PREVIEW_URL (attempt $attempt)"
-              break
-            fi
+    # 1. Match against current commit SHA if available in metadata
+    target = None
+    if commit:
+        for d in deps:
+            d_sha = d.get("meta", {}).get("githubCommitSha", "")
+            if d_sha and (d_sha == commit or commit.startswith(d_sha) or d_sha.startswith(commit)):
+                target = d
+                break
 
-            # Check if there's a BUILDING deployment (still in progress)
-            BUILDING=$(echo "$API_RESP" | python3 -c "
-import sys, json
-try:
-    data = json.load(sys.stdin)
-    for d in data.get('deployments', []):
-        if d.get('readyState') in ('BUILDING', 'INITIALIZING', 'QUEUED'):
-            print(d.get('readyState', 'BUILDING'))
-            break
-except:
-    pass
-" 2>/dev/null || true)
+    # 2. Otherwise look at the latest deployment
+    if not target:
+        target = deps[0]
 
-            if [ -n "$BUILDING" ]; then
-              echo "   ⏳ Attempt $attempt/$MAX_ATTEMPTS — deployment is $BUILDING, waiting ${POLL_INTERVAL}s..."
-            else
-              echo "   ⏳ Attempt $attempt/$MAX_ATTEMPTS — no deployment found yet, waiting ${POLL_INTERVAL}s..."
-            fi
+    state = target.get("readyState") or target.get("state", "")
+    target_url = target.get("url", "")
+    if state == "READY":
+        print(f"READY:https://{target_url}")
+    elif state in ("BUILDING", "INITIALIZING", "QUEUED"):
+        print(f"BUILDING:{state}")
+    elif state in ("ERROR", "CANCELED"):
+        print(f"FAILED:{state}")
+    else:
+        print(f"WAIT:{state}")
+except Exception as e:
+    print(f"WAIT:{e}")
+' 2>/dev/null || echo "WAIT:parse_error")
+
+            case "$STATUS" in
+              READY:*)
+                PREVIEW_URL="${STATUS#READY:}"
+                echo "✓ Resolved Vercel Preview URL: $PREVIEW_URL (attempt $attempt)"
+                break
+                ;;
+              BUILDING:*)
+                STATE="${STATUS#BUILDING:}"
+                echo "   ⏳ Attempt $attempt/$MAX_ATTEMPTS — deployment is $STATE, waiting ${POLL_INTERVAL}s..."
+                ;;
+              FAILED:*)
+                STATE="${STATUS#FAILED:}"
+                echo "❌ Vercel deployment reached failed state: $STATE"
+                exit 2
+                ;;
+              *)
+                echo "   ⏳ Attempt $attempt/$MAX_ATTEMPTS — waiting for deployment (${STATUS#WAIT:}), retrying in ${POLL_INTERVAL}s..."
+                ;;
+            esac
 
             sleep "$POLL_INTERVAL"
           done
@@ -152,6 +173,7 @@ except:
             -e BREVO_SENDER_EMAIL="$BREVO_SENDER_EMAIL" \
             -e BREVO_SENDER_NAME="$BREVO_SENDER_NAME" \
             -e ALERT_RECIPIENT_EMAIL="$ALERT_RECIPIENT_EMAIL" \
+            -v "$PWD/sentinelapi-engine:/app/sentinelapi-engine" \
             -v "$PWD/markdown:/app/markdown" \
             sentinelapi \
             --spec ./sentinelapi-engine/sandbox_openapi.json \

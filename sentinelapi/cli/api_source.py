@@ -246,8 +246,11 @@ def render_vulnerability_menu(spec: ParsedSpecification):
             run_bfla_flow(spec)
             continue
 
-   
-   
+        if "7. Security" in chosen_test:
+            from sentinelapi.features.Security_Misconfiguration import run_sec_misconfig_flow
+            run_sec_misconfig_flow(spec)
+            continue
+
         if "8. Shadow" in chosen_test:
             from sentinelapi.features.Shadow_Zombie_APIs import run_shadow_zombie_flow
             run_shadow_zombie_flow(spec)
