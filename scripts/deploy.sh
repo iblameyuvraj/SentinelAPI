@@ -253,6 +253,8 @@ fi
 # ── Step 5: Run Security Audit (AI & Email enabled via .env) ─────────────────
 echo ""
 echo "🛡️  Step 3/4: Running SentinelAPI non-interactive scan (AI & Email enabled)..."
+# Clean previous scan artifacts so stale reports/PDFs are never lingering
+rm -f markdown/*.pdf markdown/*.md markdown/*.json
 mkdir -p markdown
 
 ENV_ARGS=""

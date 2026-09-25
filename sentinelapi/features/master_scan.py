@@ -1126,12 +1126,27 @@ def _save_scan_artifacts(master_result: MasterScanResult, config: Optional[Dict[
     canonical_vuln = MARKDOWN_DIR / "vulnerabilities.pdf"
     canonical_logs = MARKDOWN_DIR / "all_logs.pdf"
 
+    # Clean any stale canonical PDFs from previous scans
+    try:
+        if canonical_vuln.exists():
+            canonical_vuln.unlink(missing_ok=True)
+        if canonical_logs.exists():
+            canonical_logs.unlink(missing_ok=True)
+    except Exception:
+        pass
+
+    fresh_vuln_pdf = None
+    fresh_logs_pdf = None
+
     try:
         from sentinelapi.reporting.pdf_generator import generate_vulnerabilities_pdf, generate_logs_pdf
         generate_vulnerabilities_pdf(master_result, vuln_pdf)
         generate_logs_pdf(master_result, logs_pdf)
         shutil.copyfile(vuln_pdf, canonical_vuln)
         shutil.copyfile(logs_pdf, canonical_logs)
+
+        fresh_vuln_pdf = canonical_vuln if canonical_vuln.exists() else vuln_pdf
+        fresh_logs_pdf = canonical_logs if canonical_logs.exists() else logs_pdf
 
         console.print(f"[bold green]✓[/bold green] Executive Vulnerabilities PDF saved → [bold cyan]{vuln_pdf}[/bold cyan]")
         console.print(f"[bold green]✓[/bold green] Complete Probe Telemetry PDF saved → [bold cyan]{logs_pdf}[/bold cyan]")
@@ -1151,8 +1166,8 @@ def _save_scan_artifacts(master_result: MasterScanResult, config: Optional[Dict[
             send_scan_report_email(
                 master_result=master_result,
                 recipient_email=target_recipient,
-                vuln_pdf_path=canonical_vuln if canonical_vuln.exists() else vuln_pdf,
-                logs_pdf_path=canonical_logs if canonical_logs.exists() else logs_pdf,
+                vuln_pdf_path=fresh_vuln_pdf,
+                logs_pdf_path=fresh_logs_pdf,
             )
         except Exception as e:
             console.print(f"[dim yellow]Warning: Email dispatch encountered an error: {e}[/dim yellow]")
