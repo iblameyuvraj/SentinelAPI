@@ -1,39 +1,76 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# SentinelAPI — All-in-One Deployment & Audit Runner (Vercel Preview API)
+# SentinelAPI — Universal CLI & Vercel Preview Audit Runner
+#
+# Syntax:
+#   fluffwalks preview "{git-commit}"           # Universal CLI syntax
+#   fluffwalks preview                          # Sync & test with default message
+#   fluffwalks --help                           # Show CLI documentation
+#
+# Direct Script Usage:
+#   ./scripts/deploy.sh preview "{git-commit}"
+#   ./scripts/deploy.sh "{git-commit}"
 #
 # Flow:
-#   1. (Optional) Syncs & pushes fluffwalks-web code to 'preview' branch on GitHub
-#   2. Triggers / resolves a genuine Vercel Preview Deployment for 'preview' branch
-#   3. Generates & validates dynamic OpenAPI specification with live preview URL
-#   4. Builds SentinelAPI production Docker container
-#   5. Executes non-interactive master scan against the preview URL
-#   6. Commits & pushes audit findings to SentinelAPI 'deployment' branch
-#
-# Usage:
-#   ./scripts/deploy.sh                          # auto-trigger/detect 'preview' deployment
-#   ./scripts/deploy.sh "commit msg"             # custom commit message
-#   ./scripts/deploy.sh "commit msg" https://... # override preview URL manually
-#
-# Required env vars (in .env or exported):
-#   VERCEL_TOKEN        — Vercel API bearer token
-#   VERCEL_PROJECT_ID   — Vercel project ID for fluffwalks-web
-# Optional:
-#   VERCEL_TEAM_ID      — Vercel team/org ID (skipped if not set)
-#   FLUFFWALKS_DIR      — Local path to fluffwalks-web repository
-#   FLUFFWALKS_BRANCH   — Branch to deploy on fluffwalks (default: preview)
+#   1. Resolves repository roots automatically (runs from ANY working directory)
+#   2. Syncs, stages, and pushes fluffwalks-web changes to GitHub 'preview' branch
+#   3. Triggers/resolves a dedicated Vercel Preview Deployment for 'preview' branch
+#   4. Purges stale scan artifacts from previous runs in markdown/
+#   5. Injects live preview URL into dynamic OpenAPI 3.0 specification
+#   6. Builds SentinelAPI production security container
+#   7. Executes 7 OWASP modules against live preview URL
+#   8. Generates executive PDF/Markdown reports + Brevo email dispatch
+#   9. Pushes audit logs to SentinelAPI 'deployment' branch
+#   10. Exits with standardized CI status code (0: PASS, 1: FAIL, 2: ERROR)
 # ==============================================================================
 set -euo pipefail
 
-COMMIT_MSG="${1:-deploy: automated test build and push to deployment branch}"
-MANUAL_URL="${2:-}"
+# ── Universal Path Resolution ────────────────────────────────────────────────
+# Allows running from ANY directory (e.g. ~/ or inside fluffwalks-web)
+SCRIPT_PATH="$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")"
+SENTINEL_ROOT="$(cd "$(dirname "$SCRIPT_PATH")/.." && pwd)"
+cd "$SENTINEL_ROOT"
+
+# ── Argument Parsing ─────────────────────────────────────────────────────────
+show_help() {
+    echo "================================================================================"
+    echo "🛡️  FLUFFWALKS & SENTINELAPI — PREVIEW AUDIT CLI"
+    echo "================================================================================"
+    echo "Usage:"
+    echo "  fluffwalks preview \"{git-commit}\"     Syncs fluffwalks-web 'preview' branch,"
+    echo "                                      builds Vercel preview, and runs audit."
+    echo "  fluffwalks preview                  Runs with automated default commit message."
+    echo "  fluffwalks preview \"msg\" <URL>      Runs audit against an explicit preview URL."
+    echo ""
+    echo "Examples:"
+    echo "  fluffwalks preview \"feat: add interactive service area component\""
+    echo "  fluffwalks preview \"fix: auth modal token parsing\""
+    echo "================================================================================"
+    exit 0
+}
+
+# Check for help flags
+if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ] || [ "${1:-}" = "help" ]; then
+    show_help
+fi
+
+# Parse 'preview' command keyword or fallback to legacy syntax
+MANUAL_URL=""
+if [ "${1:-}" = "preview" ] || [ "${1:-}" = "p" ]; then
+    COMMIT_MSG="${2:-chore(preview): automated security audit sync}"
+    MANUAL_URL="${3:-}"
+else
+    COMMIT_MSG="${1:-chore(preview): automated security audit sync}"
+    MANUAL_URL="${2:-}"
+fi
+
 SPEC_FILE="sandbox_openapi.json"
 AUTH_FILE="fluffwalks-test-case/auth_session.json"
 
-# Load .env if present
-if [ -f ".env" ]; then
+# Load .env from SentinelAPI root if present
+if [ -f "$SENTINEL_ROOT/.env" ]; then
     set -a
-    source .env
+    source "$SENTINEL_ROOT/.env"
     set +a
 fi
 
@@ -50,7 +87,7 @@ POLL_INTERVAL=10          # seconds between polls
 # ── Step 0a: Sync fluffwalks-web 'preview' branch if repo is present ─────────
 sync_fluffwalks_preview() {
     if [ -d "$FLUFFWALKS_DIR/.git" ]; then
-        echo "📦 Found local fluffwalks-web at: $FLUFFWALKS_DIR" >&2
+        echo "📦 Local fluffwalks-web detected: $FLUFFWALKS_DIR" >&2
         local curr_dir
         curr_dir="$(pwd)"
         cd "$FLUFFWALKS_DIR"
@@ -65,14 +102,14 @@ sync_fluffwalks_preview() {
 
         # Check for uncommitted changes
         if ! git diff-index --quiet HEAD -- 2>/dev/null || [ -n "$(git status --porcelain 2>/dev/null)" ]; then
-            echo "📝 Staging and committing changes on fluffwalks-web '$FLUFFWALKS_BRANCH' branch..." >&2
+            echo "📝 Staging and committing changes on '$FLUFFWALKS_BRANCH' branch..." >&2
             git add -A
             git -c user.name="Mechox" \
                 -c user.email="mechox31@gmail.com" \
-                commit -m "chore($FLUFFWALKS_BRANCH): sync code for SentinelAPI security audit" >&2 || true
+                commit -m "$COMMIT_MSG" >&2 || true
             echo "📤 Pushing to origin '$FLUFFWALKS_BRANCH'..." >&2
             git push origin "$FLUFFWALKS_BRANCH" >&2 || true
-            echo "✓ fluffwalks-web '$FLUFFWALKS_BRANCH' pushed to GitHub." >&2
+            echo "✓ fluffwalks-web '$FLUFFWALKS_BRANCH' updated and pushed to GitHub." >&2
         else
             echo "ℹ️  fluffwalks-web '$FLUFFWALKS_BRANCH' is clean and up to date." >&2
         fi
@@ -88,8 +125,8 @@ resolve_preview_url() {
         team_param="&teamId=$VERCEL_TEAM_ID"
     fi
 
-    # Optional: trigger a fresh preview deployment via Vercel API
-    echo "🚀 Checking/Triggering Vercel Preview Deployment for branch '$FLUFFWALKS_BRANCH'..." >&2
+    # Trigger a fresh preview deployment for the preview branch
+    echo "🚀 Triggering Vercel Preview Deployment for branch '$FLUFFWALKS_BRANCH'..." >&2
     local trigger_resp
     trigger_resp=$(curl -sf -X POST -H "Authorization: Bearer $VERCEL_TOKEN" \
         -H "Content-Type: application/json" \
@@ -109,7 +146,7 @@ resolve_preview_url() {
 
     if [ -n "$triggered_id" ]; then
         echo "   ✓ Triggered Preview Deployment: ID=$triggered_id" >&2
-        echo "   ⏳ Waiting for deployment $triggered_id to reach READY state..." >&2
+        echo "   ⏳ Waiting for deployment to reach READY state..." >&2
 
         for attempt in $(seq 1 $MAX_POLL_ATTEMPTS); do
             local dep_info
@@ -130,12 +167,12 @@ resolve_preview_url() {
                 break
             fi
 
-            echo "   ⏳ [$attempt/$MAX_POLL_ATTEMPTS] State: $dep_state | Retrying in ${POLL_INTERVAL}s..." >&2
+            echo "   ⏳ [$attempt/$MAX_POLL_ATTEMPTS] State: $dep_state | Polling in ${POLL_INTERVAL}s..." >&2
             sleep "$POLL_INTERVAL"
         done
     fi
 
-    # Fallback: Query for latest READY preview deployment on branch or non-production
+    # Fallback: Query for latest READY deployment on branch 'preview' (strictly non-production)
     echo "ℹ️  Querying Vercel API for latest READY deployment on branch '$FLUFFWALKS_BRANCH'..." >&2
     for attempt in $(seq 1 $MAX_POLL_ATTEMPTS); do
         local api_resp
@@ -177,7 +214,7 @@ except:
             return 0
         fi
 
-        echo "   ⏳ Attempt $attempt/$MAX_POLL_ATTEMPTS — no READY deployment yet, waiting ${POLL_INTERVAL}s..." >&2
+        echo "   ⏳ Attempt $attempt/$MAX_POLL_ATTEMPTS — waiting for READY preview deployment (${POLL_INTERVAL}s)..." >&2
         sleep "$POLL_INTERVAL"
     done
 
@@ -185,13 +222,13 @@ except:
 }
 
 echo "================================================================================"
-echo "🚀 SENTINELAPI — ONE-COMMAND DEPLOYMENT PIPELINE (Vercel Preview Mode)"
+echo "🚀 FLUFFWALKS & SENTINELAPI — PREVIEW AUDIT PIPELINE"
 echo "================================================================================"
 echo "• Target Branch: $FLUFFWALKS_BRANCH (fluffwalks-web)"
 echo "• Commit Msg:    $COMMIT_MSG"
 echo "================================================================================"
 
-# ── Sync fluffwalks-web repo if present ──────────────────────────────────────
+# ── Step 0: Sync fluffwalks-web repository if present ────────────────────────
 sync_fluffwalks_preview
 
 # ── Determine Target URL ─────────────────────────────────────────────────────
@@ -199,30 +236,30 @@ TARGET_URL=""
 
 if [ -n "$MANUAL_URL" ]; then
     TARGET_URL="$MANUAL_URL"
-    echo "✓ Using manually provided URL: $TARGET_URL"
+    echo "✓ Using manually provided preview URL: $TARGET_URL"
 elif [ -n "$VERCEL_TOKEN" ] && [ -n "$VERCEL_PROJECT_ID" ]; then
     TARGET_URL=$(resolve_preview_url)
     if [ -n "$TARGET_URL" ]; then
-        echo "✓ Resolved Vercel Preview URL via API: $TARGET_URL"
+        echo "✓ Resolved Vercel Preview URL: $TARGET_URL"
     else
         echo "❌ Could not resolve a READY Vercel preview deployment after ${MAX_POLL_ATTEMPTS} attempts."
         echo "   Make sure you've pushed code to trigger a Vercel deployment first."
-        echo "   Or pass a URL manually: ./scripts/deploy.sh \"msg\" https://your-preview.vercel.app"
+        echo "   Or pass a URL manually: fluffwalks preview \"msg\" https://your-preview.vercel.app"
         exit 2
     fi
 else
     echo "❌ No VERCEL_TOKEN / VERCEL_PROJECT_ID found and no manual URL provided."
-    echo "   Set them in .env or pass a URL: ./scripts/deploy.sh \"msg\" https://your-preview.vercel.app"
+    echo "   Configure .env in SentinelAPI root or pass: fluffwalks preview \"msg\" https://your-preview.vercel.app"
     exit 2
 fi
 
 echo ""
-echo "• Target URL:    $TARGET_URL"
+echo "• Preview URL:   $TARGET_URL"
 echo "• Commit Msg:    $COMMIT_MSG"
-echo "• Branch:        deployment (SentinelAPI)"
+echo "• Remote Branch: deployment (SentinelAPI)"
 echo "================================================================================"
 
-# ── Step 1: Ensure on 'deployment' branch ────────────────────────────────────
+# ── Step 1: Ensure SentinelAPI is on 'deployment' branch ─────────────────────
 CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
 if [ "$CURRENT_BRANCH" != "deployment" ]; then
     echo "🔀 Switching SentinelAPI to 'deployment' branch..."
@@ -231,7 +268,7 @@ fi
 
 # ── Step 2: Generate & validate dynamic OpenAPI specification ────────────────
 echo ""
-echo "📝 Step 1/4: Generating & validating OpenAPI 3.0 specification..."
+echo "📝 Step 1/4: Generating & validating dynamic OpenAPI 3.0 specification..."
 python3 scripts/generate_openapi.py \
     --source "$SPEC_FILE" \
     --base-url "$TARGET_URL" \
@@ -253,7 +290,7 @@ fi
 # ── Step 5: Run Security Audit (AI & Email enabled via .env) ─────────────────
 echo ""
 echo "🛡️  Step 3/4: Running SentinelAPI non-interactive scan (AI & Email enabled)..."
-# Clean previous scan artifacts so stale reports/PDFs are never lingering
+# Purge previous scan artifacts so stale PDFs/reports are never lingering
 rm -f markdown/*.pdf markdown/*.md markdown/*.json
 mkdir -p markdown
 
@@ -274,7 +311,7 @@ docker run --rm \
     --ci || SCAN_EXIT=$?
 
 echo ""
-echo "📊 Local Test Conclusion Code: $SCAN_EXIT"
+echo "📊 Test Conclusion Code: $SCAN_EXIT"
 if [ "$SCAN_EXIT" -eq 0 ]; then
     echo "🟢 Status: 0 (PASS — No vulnerabilities detected)"
 elif [ "$SCAN_EXIT" -eq 1 ]; then
@@ -283,7 +320,7 @@ else
     echo "🟡 Status: 2 (ERROR — Target unreachable or probe failure)"
 fi
 
-# ── Step 6: Commit & Push to deployment branch ──────────────────────────────
+# ── Step 6: Commit & Push to SentinelAPI deployment branch ──────────────────
 echo ""
 echo "📤 Step 4/4: Pushing code to GitHub 'deployment' branch..."
 git add -A
@@ -297,7 +334,7 @@ git push origin deployment
 
 echo ""
 echo "================================================================================"
-echo "✅ DEPLOYMENT & PUSH COMPLETE!"
+echo "✅ FLUFFWALKS PREVIEW AUDIT COMPLETE!"
 echo "• Preview Tested:  $TARGET_URL"
 echo "• Target Branch:   $FLUFFWALKS_BRANCH (fluffwalks-web)"
 echo "• Remote Branch:   deployment (SentinelAPI)"
@@ -305,3 +342,5 @@ echo "• Conclusion Code: $SCAN_EXIT"
 echo "• GitHub Actions CI has been triggered automatically."
 echo "• Check CI progress: gh run list --repo iblameyuvraj/SentinelAPI"
 echo "================================================================================"
+
+exit "$SCAN_EXIT"
