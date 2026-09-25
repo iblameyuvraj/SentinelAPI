@@ -1,5 +1,6 @@
 # ==============================================================================
 # Fluffwalks Web — Automated Vercel Preview Security Audit via SentinelAPI
+# (Vercel API Only — No CLI Required)
 #
 # Place this file in your `fluffwalks-web` repository at:
 # .github/workflows/sentinel-audit.yml
@@ -8,6 +9,8 @@
 name: SentinelAPI Security Gate (Vercel Preview)
 
 on:
+  push:
+    branches: [ main, master, staging ]
   pull_request:
     branches: [ main, master, staging ]
   workflow_dispatch:
@@ -24,39 +27,89 @@ jobs:
       - name: 📥 Check out fluffwalks-web repository
         uses: actions/checkout@v4
 
-      - name: 🛠️ Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - name: 📦 Install Vercel CLI
-        run: npm install -g vercel@latest
-
-      - name: 🚀 Deploy Ephemeral Preview to Vercel & Capture URL
+      # ──────────────────────────────────────────────────────────────────────
+      # Vercel API Only — Resolve latest READY preview deployment URL
+      # No Vercel CLI needed. Polls REST API until a deployment is READY.
+      # ──────────────────────────────────────────────────────────────────────
+      - name: 🚀 Resolve Vercel Preview URL via REST API
         id: vercel-deploy
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          VERCEL_TEAM_ID: ${{ secrets.VERCEL_ORG_ID }}
         run: |
           echo "========================================================"
-          echo "🌐 DEPLOYING VERCEL PREVIEW ENVIRONMENT"
+          echo "🌐 RESOLVING VERCEL PREVIEW DEPLOYMENT (API Only)"
           echo "========================================================"
-          
-          # Deploy and capture output
-          DEPLOY_OUTPUT=$(vercel deploy --yes --token="$VERCEL_TOKEN" 2>&1)
-          echo "$DEPLOY_OUTPUT"
-          
-          # Extract live .vercel.app URL
-          PREVIEW_URL=$(echo "$DEPLOY_OUTPUT" | grep -oE 'https://[^ ]*\.vercel\.app' | tail -n 1 || true)
-          
+
+          TEAM_PARAM=""
+          if [ -n "$VERCEL_TEAM_ID" ]; then
+            TEAM_PARAM="&teamId=$VERCEL_TEAM_ID"
+          fi
+
+          PREVIEW_URL=""
+          MAX_ATTEMPTS=30
+          POLL_INTERVAL=10
+
+          # Wait for Vercel to pick up the push and reach READY state
+          for attempt in $(seq 1 $MAX_ATTEMPTS); do
+            API_RESP=$(curl -sf -H "Authorization: Bearer $VERCEL_TOKEN" \
+              "https://api.vercel.com/v6/deployments?projectId=${VERCEL_PROJECT_ID}${TEAM_PARAM}&limit=5" 2>/dev/null || echo "{}")
+
+            # Parse the latest READY deployment URL
+            READY_URL=$(echo "$API_RESP" | python3 -c "
+import sys, json
+try:
+    data = json.load(sys.stdin)
+    deps = data.get('deployments', [])
+    for d in deps:
+        if d.get('readyState') == 'READY':
+            print('https://' + d['url'])
+            break
+except:
+    pass
+" 2>/dev/null || true)
+
+            if [ -n "$READY_URL" ]; then
+              PREVIEW_URL="$READY_URL"
+              echo "✓ Resolved Vercel Preview URL: $PREVIEW_URL (attempt $attempt)"
+              break
+            fi
+
+            # Check if there's a BUILDING deployment (still in progress)
+            BUILDING=$(echo "$API_RESP" | python3 -c "
+import sys, json
+try:
+    data = json.load(sys.stdin)
+    for d in data.get('deployments', []):
+        if d.get('readyState') in ('BUILDING', 'INITIALIZING', 'QUEUED'):
+            print(d.get('readyState', 'BUILDING'))
+            break
+except:
+    pass
+" 2>/dev/null || true)
+
+            if [ -n "$BUILDING" ]; then
+              echo "   ⏳ Attempt $attempt/$MAX_ATTEMPTS — deployment is $BUILDING, waiting ${POLL_INTERVAL}s..."
+            else
+              echo "   ⏳ Attempt $attempt/$MAX_ATTEMPTS — no deployment found yet, waiting ${POLL_INTERVAL}s..."
+            fi
+
+            sleep "$POLL_INTERVAL"
+          done
+
           if [ -z "$PREVIEW_URL" ]; then
-            echo "❌ Failed to capture Vercel preview URL from output!"
+            echo "❌ No READY Vercel preview deployment found after $MAX_ATTEMPTS attempts."
+            echo "   Ensure Vercel is connected to this repo and auto-deploys on push."
             exit 2
           fi
-          
+
           echo "preview_url=$PREVIEW_URL" >> $GITHUB_OUTPUT
-          echo "✓ Live Ephemeral Preview URL: $PREVIEW_URL"
+
+      - name: 🐍 Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
 
       - name: 📥 Check out SentinelAPI Scanner Engine
         uses: actions/checkout@v4
@@ -87,7 +140,7 @@ jobs:
           ALERT_RECIPIENT_EMAIL: ${{ secrets.ALERT_RECIPIENT_EMAIL }}
         run: |
           mkdir -p markdown
-          
+
           SCAN_CODE=0
           docker run --rm \
             -e CUSTOM_LLM_BASE_URL="$CUSTOM_LLM_BASE_URL" \
@@ -101,22 +154,22 @@ jobs:
             -e ALERT_RECIPIENT_EMAIL="$ALERT_RECIPIENT_EMAIL" \
             -v "$PWD/markdown:/app/markdown" \
             sentinelapi \
-            --spec ./sandbox_openapi.json \
+            --spec ./sentinelapi-engine/sandbox_openapi.json \
             --base-url "$PREVIEW_URL" \
             --token "$BEARER_TOKEN" \
             --cookie "$COOKIE_STRING" \
             --ci || SCAN_CODE=$?
 
           echo "scan_exit_code=$SCAN_CODE" >> $GITHUB_OUTPUT
-          
+
           echo "========================================================"
           echo "📊 SENTINELAPI AUDIT CONCLUSION CODE: $SCAN_CODE"
           if [ "$SCAN_CODE" -eq 0 ]; then
-            echo "🟢 CONCLUSION: 0 (PASS - No vulnerabilities detected)"
+            echo "🟢 CONCLUSION: 0 (PASS — No vulnerabilities detected)"
           elif [ "$SCAN_CODE" -eq 1 ]; then
-            echo "🔴 CONCLUSION: 1 (FAIL - Vulnerabilities confirmed)"
+            echo "🔴 CONCLUSION: 1 (FAIL — Vulnerabilities confirmed)"
           else
-            echo "🟡 CONCLUSION: 2 (ERROR - Target unreachable or probe failure)"
+            echo "🟡 CONCLUSION: 2 (ERROR — Target unreachable or probe failure)"
           fi
           echo "========================================================"
 
@@ -138,10 +191,10 @@ jobs:
           script: |
             const exitCode = '${{ steps.sentinel-scan.outputs.scan_exit_code }}';
             const previewUrl = '${{ steps.vercel-deploy.outputs.preview_url }}';
-            
+
             let statusBadge = '🟢 **PASS (0)**';
             let summaryMessage = '✅ All 7 OWASP modules passed cleanly! Zero confirmed vulnerabilities. PR is safe to merge.';
-            
+
             if (exitCode === '1') {
               statusBadge = '🔴 **FAIL (1)**';
               summaryMessage = '❌ **Security vulnerabilities detected.** Review the attached PDF executive report in workflow artifacts for reproduction PoCs.';
