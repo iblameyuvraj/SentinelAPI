@@ -10,12 +10,14 @@ while [ -h "$SOURCE" ]; do
   [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
 done
 DIR="$( cd -P "$( dirname "$SOURCE" )" >/dev/null 2>&1 && pwd )"
-cd "$DIR"
 
-if [ ! -d ".venv" ]; then
-    echo "Virtual environment not found. Setting up..."
-    python3 -m venv .venv
-    .venv/bin/pip install -r requirements.txt
+if [ ! -d "$DIR/.venv" ]; then
+    echo "Virtual environment not found in $DIR. Setting up..."
+    python3 -m venv "$DIR/.venv"
+    "$DIR/.venv/bin/pip" install --upgrade pip --quiet
+    "$DIR/.venv/bin/pip" install -r "$DIR/requirements.txt" --quiet
+    "$DIR/.venv/bin/pip" install -e "$DIR" --quiet
 fi
 
-exec .venv/bin/python -m sentinelapi.main "$@"
+export PYTHONPATH="$DIR:${PYTHONPATH:-}"
+exec "$DIR/.venv/bin/python" -m sentinelapi.main "$@"

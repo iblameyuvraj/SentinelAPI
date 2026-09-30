@@ -96,10 +96,30 @@ SentinelAPI/
 ## 🛠️ Quickstart & Usage
 
 ### 1. Installation
-Clone the repository and install dependencies in editable mode:
+
+#### ⚡ Automated One-Line Install (Recommended):
+Run the autonomous installer via `curl`. It checks dependencies, sets up an isolated Python virtual environment in `~/.sentinel`, links the global `sentinel` CLI command, and configures **Zsh autocompletion & PATH**:
+```bash
+curl -fsSL https://raw.githubusercontent.com/iblameyuvraj/SentinelAPI/main/install.sh | bash
+```
+> *Prefer Zsh directly?* You can also run:
+> ```bash
+> curl -fsSL https://raw.githubusercontent.com/iblameyuvraj/SentinelAPI/main/install.sh | zsh
+> ```
+After installation, reload your shell:
+```bash
+source ~/.zshrc
+```
+
+#### 📦 Manual Developer Setup:
 ```bash
 git clone https://github.com/iblameyuvraj/SentinelAPI.git
 cd SentinelAPI
+./install.sh
+# or manually:
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
 pip install -e .
 ```
 
