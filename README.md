@@ -111,7 +111,9 @@ After installation, reload your shell:
 source ~/.zshrc
 ```
 
-#### 📦 Manual Developer Setup:
+#### 📦 Developer Setup:
+
+**macOS / Linux:**
 ```bash
 git clone https://github.com/iblameyuvraj/SentinelAPI.git
 cd SentinelAPI
@@ -119,6 +121,18 @@ cd SentinelAPI
 # or manually:
 python3 -m venv .venv
 source .venv/bin/activate
+pip install -r requirements.txt
+pip install -e .
+```
+
+**Windows (PowerShell):**
+```powershell
+git clone https://github.com/iblameyuvraj/SentinelAPI.git
+cd SentinelAPI
+powershell -ExecutionPolicy Bypass -File .\install.ps1
+# or manually:
+python -m venv .venv
+.\.venv\Scripts\activate
 pip install -r requirements.txt
 pip install -e .
 ```
